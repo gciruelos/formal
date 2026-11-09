@@ -1,0 +1,27 @@
+name = "Formalizations"
+version = "0.1.0"
+keywords = ["math"]
+defaultTargets = ["MartinPhd", "ScoccolaPhd", "CiruelosLic"]
+
+[leanOptions]
+pp.unicode.fun = true
+relaxedAutoImplicit = false
+autoImplicit = false
+maxSynthPendingDepth = 3
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.36.0-rc2"
+
+# One library per formalized work; `lake build <Lib>` builds just that one.
+[[lean_lib]]
+name = "MartinPhd"
+
+[[lean_lib]]
+name = "ScoccolaPhd"
+
+[[lean_lib]]
+name = "CiruelosLic"
+# The source project used Lean's default `autoImplicit` (with relaxedAutoImplicit = false).
+leanOptions = { autoImplicit = true }

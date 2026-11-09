@@ -1,0 +1,109 @@
+# Metadata per formalized work, read by scripts/update_stats.py. One table per lean_lib.
+
+[MartinPhd]
+title = "Aspectos homológicos de la teoría de especies"
+author = "Fernando Daniel Martin"
+kind = "PhD thesis, Universidad de Buenos Aires"
+year = 2024
+source = "MartinPhd/MartinPhd.pdf"
+scope = "Chapters 1–4 (Chapter 1 proved; Chapters 2–4 outline)"
+namespace = "MartinPhd"
+
+[[MartinPhd.main]]
+label = "Theorem 1.7 (Solomon–Tits)"
+name = "MartinPhd.solomon_tits"
+
+[[MartinPhd.main]]
+label = "Theorem 1.35"
+name = "MartinPhd.thm_1_35"
+
+[[MartinPhd.main]]
+label = "Theorem 1.36"
+name = "MartinPhd.thm_1_36"
+
+[[MartinPhd.main]]
+label = "Theorem 2.28"
+name = "MartinPhd.LinOrd.theorem_2_28"
+
+[[MartinPhd.main]]
+label = "Theorem 3.13"
+name = "MartinPhd.Sp.theorem_3_13"
+
+[ScoccolaPhd]
+title = "Locally Persistent Categories and Metric Properties of Interleaving Distances"
+author = "Luis N. Scoccola"
+kind = "PhD thesis, Western University"
+year = 2020
+source = "ScoccolaPhd/ScoccolaPhd.pdf"
+scope = "Chapters 2–6"
+namespace = "ScoccolaPhd"
+
+[[ScoccolaPhd.main]]
+label = "Theorem A (4.2.2)"
+name = "ScoccolaPhd.LPFunctor.quotientInterleavingDist_le_of_acyclic"
+
+[[ScoccolaPhd.main]]
+label = "Theorem B (4.1.4)"
+name = "ScoccolaPhd.quotientInterleavingDist_eq_inf_quotientInterleaved"
+
+[[ScoccolaPhd.main]]
+label = "Theorem B (4.1.4 with Lemma 4.1.5)"
+name = "ScoccolaPhd.quotientInterleavingDist_eq_inf_acyclicCover_of_powered"
+
+[[ScoccolaPhd.main]]
+label = "Theorem C (4.3.3)"
+name = "ScoccolaPhd.quotientInterleavingDist_complete"
+
+[[ScoccolaPhd.main]]
+label = "Theorem C (4.3.3 with Prop. 3.2.15 and Lemma 4.1.5)"
+name = "ScoccolaPhd.quotientInterleavingDist_complete_of_powered"
+
+[[ScoccolaPhd.main]]
+label = "Prop. 3.2.12 (weighted pullbacks)"
+name = "ScoccolaPhd.exists_weightedPullback"
+
+[[ScoccolaPhd.main]]
+label = "Prop. 3.2.15 (weighted sequential limits)"
+name = "ScoccolaPhd.hasWeightedSeqLimits_of_powered"
+
+[[ScoccolaPhd.main]]
+label = "Prop. 3.2.19 (terminal midpoints)"
+name = "ScoccolaPhd.hasTerminalMidpoints_of_powered"
+
+[[ScoccolaPhd.main]]
+label = "Theorem D (4.4.2)"
+name = "ScoccolaPhd.interleavingDist_intrinsic"
+
+[[ScoccolaPhd.main]]
+label = "Theorem D (4.4.2 with Prop. 3.2.19)"
+name = "ScoccolaPhd.interleavingDist_intrinsic_of_powered"
+
+
+[CiruelosLic]
+title = "Factorizing Derivations via Intersection Types"
+author = "Gonzalo Ciruelos Rodríguez"
+kind = "Licenciatura thesis, Universidad de Buenos Aires"
+year = 2018
+source = "CiruelosLic/CiruelosLic.pdf"
+scope = "Whole thesis, plus the cited orthogonality of β-reduction"
+namespace = "CiruelosLic"
+
+[[CiruelosLic.main]]
+label = "Corollary 2.27 (Confluence)"
+name = "CiruelosLic.confluence"
+
+[[CiruelosLic.main]]
+label = "Theorem 3.27 (distributive lattice)"
+name = "CiruelosLic.distRS.instDistribLattice"
+
+[[CiruelosLic.main]]
+label = "Proposition 4.9 (refinability)"
+name = "CiruelosLic.has_hnf_iff_refinable"
+
+[[CiruelosLic.main]]
+label = "Lemma 4.19 (generalized cube lemma)"
+name = "CiruelosLic.generalized_cube_lemma"
+
+[[CiruelosLic.main]]
+label = "Theorem 5.22 (Factorization)"
+name = "CiruelosLic.factorization"
