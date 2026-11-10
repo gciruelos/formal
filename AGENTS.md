@@ -60,11 +60,10 @@ with `pdftotext -layout <Lib>/<Lib>.pdf -` and rely on it heavily:
   it is a gap;
 * quote or paraphrase it in docstrings where that helps a reader compare.
 
-Results the source cites from other works (its references) are not in the PDF. Look them up
-online (arXiv, the author's page, the cited book) to get the exact statement and hypotheses,
-or ask the user for the reference text. Do not guess a cited statement; it goes in a
-`Preliminaries<Result>.lean` file ([`STYLE.md`](STYLE.md)) and its docstring names where it
-was taken from.
+Results the source cites from other works are not in the PDF. Look them up online (arXiv, the
+author's page, the cited book) for the exact statement, hypotheses and proof, or ask the user for
+the reference text. Do not guess a cited statement; it goes in a `Preliminaries<Result>.lean`
+file ([`STYLE.md`](STYLE.md)) and its docstring names where it was taken from.
 
 ## Three passes
 
@@ -80,6 +79,17 @@ Formalize a source in **three passes, in this order**. Finish a pass for the who
    category-theory coherence, results Mathlib nearly has). Do these last, or import them
    from Mathlib when available.
 
+## Closing `sorry`s
+
+When asked to close `sorry`s, find the proof in the source (or, for a cited result, online, as
+above) and translate it into Lean step by step. Do not invent a different argument unless the
+text is wrong; then record a gap. Before building a construction or proof from scratch, search
+Mathlib (`grep` in `.lake/packages/mathlib`, Loogle, `exact?`) and public Lean projects on GitHub
+for existing proofs or constructions, and adapt them. If a project has what is needed, consider
+vendoring the relevant part (pinned and checksummed, license kept, as `scripts/vendor_tauceti.sh`
+does for TauCeti) and tell the user. Do not use subagents, or delegate to other agents, unless the
+user says so.
+
 ## Gaps, changes and style
 
 How files are organized and named, how declarations reference the source, and how gaps
@@ -88,7 +98,7 @@ How files are organized and named, how declarations reference the source, and ho
 
 ## Delegating to other coding agents
 
-Rank the open `sorry`s by difficulty and pick a model from the table. Hard tasks are new
+Only when the user asks for it. Rank the open `sorry`s by difficulty and pick a model from the table. Hard tasks are new
 constructions, the source's key arguments, or anything that changes a definition. Medium tasks
 are everything else: a clear proof in the source, Mathlib plumbing, routine unfolding and
 short calculations. Most tasks are medium: default to a medium model, and use hard models
@@ -99,8 +109,8 @@ sparingly, only for the few tasks that need them.
 | hard | `claude-opus-5-5` | `gpt-6.1-sol` | `gemini-4-argon-low` |
 | medium | `claude-sonnet-5-5` | `gpt-6.1-terra` | `gemini-3.8-flash-low` |
 
-Model names are as the CLIs list them: `agy models`, `codex debug models`; `claude` takes a full
-model name or an alias (`opus`, `sonnet`).
+Model names are as the CLIs list them (`agy models`, `codex debug models`); `claude` takes a
+full model name or an alias (`opus`, `sonnet`).
 
 **How to call them.** Write the task to a prompt file in a scratch directory (not the repo),
 then run the agent from the project root in the background, with stdout going to a file and
@@ -113,19 +123,22 @@ claude -p --model claude-sonnet-5-5 --effort low --permission-mode acceptEdits \
 # codex: -m gpt-6.1-sol or gpt-6.1-terra
 codex exec -m gpt-6.1-terra -c model_reasoning_effort=low -s workspace-write \
   "$(cat prompt.md)" </dev/null > out.txt
-# agy: --model gemini-4-argon-low or gemini-3.8-flash-low (agy-host.sh takes the same arguments as agy)
-scripts/agy-host.sh --model gemini-3.8-flash-low -p "$(cat prompt.md)" </dev/null > out.txt
+# agy: --model gemini-4-argon-low or gemini-3.8-flash-low
+scripts/agy-delegate.sh gemini-3.8-flash-low prompt.md out.txt
 ```
 
-* `scripts/agy-host.sh` runs `agy` headless. The agent reuses the installed toolchain and
+* `scripts/agy-delegate.sh MODEL PROMPT_FILE OUT_FILE` launches an agy worker (reads the prompt
+  file itself, detaches, writes `OUT_FILE.pid`, fails fast on quota errors). Stop a worker with `kill $(cat OUT_FILE.pid)`, never `pkill -f agy…` (it matches your own
+  shell). If a model returns `RESOURCE_EXHAUSTED`, switch to another (`agy models`).
+* `scripts/agy-host.sh` (called by the delegate script) runs `agy` headless. The agent reuses the installed toolchain and
   the built `.lake/`, edits are accepted automatically, and only Lean/Lake and read-only shell
   commands are allowed (add more with `AGY_EXTRA_ALLOW`). Plain `agy -p` auto-denies its first
-  shell command. `agy models` lists the available models.
+  shell command.
 * `claude -p` cannot ask for permissions: `--permission-mode acceptEdits` lets it edit files,
   and `--allowedTools "Bash(lake:*)"` lets it run `lake`.
 * `codex exec -s workspace-write` can edit the repo and run the local `lake`, with no network.
 
-**The prompt file must say:**
+**The prompt file must say** (`agy-delegate.sh` appends the shell rules itself):
 * the task (which `sorry`s or declarations) and the files it may edit;
 * the files not to touch;
 * the source PDF and the section numbers to read, and that the agent must read them

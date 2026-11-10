@@ -107,3 +107,32 @@ name = "CiruelosLic.generalized_cube_lemma"
 [[CiruelosLic.main]]
 label = "Theorem 5.22 (Factorization)"
 name = "CiruelosLic.factorization"
+
+[TamaroffPhd]
+title = "Homotopical and effective methods for associative algebras"
+author = "Pedro Tamaroff"
+kind = "PhD thesis, Trinity College Dublin"
+year = 2021
+source = "TamaroffPhd/TamaroffPhd.pdf"
+scope = "Chapters 2–6 (outline: definitions and statements)"
+namespace = "TamaroffPhd"
+
+[[TamaroffPhd.main]]
+label = "Theorem 3.2.6 (minimal model)"
+name = "TamaroffPhd.minimalModel_isModel"
+
+[[TamaroffPhd.main]]
+label = "Theorem 5.4.3 (FG ⇔ Gorenstein)"
+name = "TamaroffPhd.theorem_4_3"
+
+[[TamaroffPhd.main]]
+label = "Theorem 5.5.2 (periodic HH)"
+name = "TamaroffPhd.theorem_5_2"
+
+[[TamaroffPhd.main]]
+label = "Theorem 6.3.2 (model Diamond Lemma)"
+name = "TamaroffPhd.ShaExtension.theorem_3_2"
+
+[[TamaroffPhd.main]]
+label = "Proposition 6.4.1 (Bergman's Diamond Lemma)"
+name = "TamaroffPhd.diamondLemma"

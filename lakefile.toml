@@ -1,7 +1,7 @@
 name = "Formalizations"
 version = "0.1.0"
 keywords = ["math"]
-defaultTargets = ["MartinPhd", "ScoccolaPhd", "CiruelosLic"]
+defaultTargets = ["MartinPhd", "ScoccolaPhd", "CiruelosLic", "TamaroffPhd"]
 
 [leanOptions]
 pp.unicode.fun = true
@@ -12,7 +12,7 @@ maxSynthPendingDepth = 3
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.36.0-rc2"
+rev = "1b1ccf4b088b32fa3f23f2de1127433254a81e1e"
 
 # One library per formalized work; `lake build <Lib>` builds just that one.
 [[lean_lib]]
@@ -25,3 +25,16 @@ name = "ScoccolaPhd"
 name = "CiruelosLic"
 # The source project used Lean's default `autoImplicit` (with relaxedAutoImplicit = false).
 leanOptions = { autoImplicit = true }
+
+[[lean_lib]]
+name = "TamaroffPhd"
+
+# Vendored third-party code (Apache-2.0): the A∞ / homological-transfer part of
+# https://github.com/TauCetiProject/TauCeti, pinned and checksummed by scripts/vendor_tauceti.sh.
+# Not a formalized work (no works.toml entry); not in defaultTargets.
+[[lean_lib]]
+name = "TauCeti"
+srcDir = "vendor/TauCeti"
+globs = ["TauCeti.+"]
+# The upstream project uses Lean's default `autoImplicit`.
+leanOptions = { autoImplicit = true, relaxedAutoImplicit = true }

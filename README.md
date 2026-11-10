@@ -12,9 +12,10 @@ lake build                # all of them
 
 | Project | Work | Scope | Lines | Sorry-free theorems | `sorry` | Main results proved | Gaps found |
 |:---|:---|:---|---:|---:|---:|---:|---:|
-| [MartinPhd](MartinPhd/README.md) | Fernando Daniel Martin, *Aspectos homológicos de la teoría de especies* (PhD thesis, Universidad de Buenos Aires, 2024) | Chapters 1–4 (Chapter 1 proved; Chapters 2–4 outline) | 27,046 | 1295/1361 | 116 | 5/5 | 15 (3 open) |
+| [MartinPhd](MartinPhd/README.md) | Fernando Daniel Martin, *Aspectos homológicos de la teoría de especies* (PhD thesis, Universidad de Buenos Aires, 2024) | Chapters 1–4 (Chapter 1 proved; Chapters 2–4 outline) | 27,521 | 1314/1379 | 113 | 5/5 | 15 (3 open) |
 | [ScoccolaPhd](ScoccolaPhd/README.md) | Luis N. Scoccola, *Locally Persistent Categories and Metric Properties of Interleaving Distances* (PhD thesis, Western University, 2020) | Chapters 2–6 | 15,632 | 746/778 | 30 | 10/10 | 13 (3 open) |
 | [CiruelosLic](CiruelosLic/README.md) | Gonzalo Ciruelos Rodríguez, *Factorizing Derivations via Intersection Types* (Licenciatura thesis, Universidad de Buenos Aires, 2018) | Whole thesis, plus the cited orthogonality of β-reduction | 13,280 | 716/716 | 0 | 5/5 | 8 (0 open) |
+| [TamaroffPhd](TamaroffPhd/README.md) | Pedro Tamaroff, *Homotopical and effective methods for associative algebras* (PhD thesis, Trinity College Dublin, 2021) | Chapters 2–6 (outline: definitions and statements) | 4,324 | 121/208 | 89 | 1/5 | 2 (1 open) |
 
 <!-- END GENERATED: projects -->
 
@@ -33,8 +34,19 @@ works.toml                  [<Lib>] metadata and [[<Lib>.main]] headline theorem
 <Lib>/README.md             see "The README of a work" below
 <Lib>/<Module>.lean         flat: no subdirectories, module MartinPhd.Chapter1Section4
 <Lib>/<Lib>.pdf             the source being formalized
-scripts/                    stats machinery
+scripts/                    stats machinery, vendor_tauceti.sh
+vendor/TauCeti/             vendored third-party code (see below); not a work
 ```
+
+## Vendored code
+
+`vendor/TauCeti/` is a pinned, checksummed copy of the A∞ / homological-transfer part of
+[TauCeti](https://github.com/TauCetiProject/TauCeti) (Apache-2.0; `vendor/TauCeti/LICENSE`),
+built as the Lake library `TauCeti` (not a formalized work, so it has no `works.toml` entry and
+the statistics skip it). It is restored and verified with `scripts/vendor_tauceti.sh`
+(`fetch` | `verify` | `update <rev>`); never edit it by hand. Its pin must match this project's
+Mathlib revision: TauCeti tracks Mathlib `master`, so `update` to a new upstream revision may
+need a Mathlib bump first. Works must not import each other, but may import `TauCeti`.
 
 Libraries are named `<Name>Phd`/`Lic`/`Msc` or `<Author><Yyyy>[<Title>]`; see [`STYLE.md`](STYLE.md).
 

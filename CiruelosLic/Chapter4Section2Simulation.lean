@@ -200,7 +200,7 @@ theorem Refines.hasHNF {t : LTerm} {u : DTerm} (hr : Refines t u)
     (hc : Correct u) : t.HasHNF := by
   generalize he : u.size = n
   induction n using Nat.strong_induction_on generalizing t u with
-  | h n ih =>
+  | ind n ih =>
     rcases hr.head_progress hc with hn | ⟨s, v, ℓ, hb, hd, hv⟩
     · exact ⟨t, .refl, hn⟩
     · have hsize := size_dStep hc hd

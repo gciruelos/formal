@@ -1802,6 +1802,295 @@ theorem mu_eq_zero_of_second_head (lam : Funct k)
   rw [mu_comm]
   exact h τ σ hp.swap ht
 
+/-! ### Bilinear extension of the shuffle product and the antipode identities -/
+
+namespace ShuffleAlg
+
+open Finsupp
+
+/-- Prepend a letter, linearly. -/
+def consL (a : ℕ) : ((Wd →₀ ℤ)) →ₗ[ℤ] ((Wd →₀ ℤ)) := Finsupp.lmapDomain ℤ ℤ (a :: ·)
+
+@[simp] theorem consL_single (a : ℕ) (w : Wd) (r : ℤ) :
+    consL a (Finsupp.single w r) = Finsupp.single (a :: w) r := by
+  simp [consL]
+
+/-- The shuffle product, extended bilinearly to formal sums of words. -/
+def shufL : ((Wd →₀ ℤ)) →ₗ[ℤ] ((Wd →₀ ℤ)) →ₗ[ℤ] ((Wd →₀ ℤ)) :=
+  Finsupp.lift (((Wd →₀ ℤ)) →ₗ[ℤ] ((Wd →₀ ℤ))) ℤ Wd fun x =>
+    Finsupp.lift ((Wd →₀ ℤ)) ℤ Wd fun y => shuf x y
+
+theorem shufL_single (x y : Wd) :
+    shufL (Finsupp.single x 1) (Finsupp.single y 1) = shuf x y := by
+  simp [shufL]
+
+theorem consL_shuf (a : ℕ) (x y : Wd) :
+    consL a (shuf x y) = ((shuffle x y).map fun ω => Finsupp.single (a :: ω) (1 : ℤ)).sum := by
+  rw [shuf, map_list_sum]
+  simp [List.map_map, Function.comp_def]
+
+theorem shuf_cons_cons (a b : ℕ) (x y : Wd) :
+    shuf (a :: x) (b :: y) = consL a (shuf x (b :: y)) + consL b (shuf (a :: x) y) := by
+  rw [consL_shuf, consL_shuf, shuf]
+  simp [List.map_append, List.sum_append, List.map_map, Function.comp_def]
+
+
+theorem shufL_single' (x y : Wd) (r s : ℤ) :
+    shufL (Finsupp.single x r) (Finsupp.single y s) = (r * s) • shuf x y := by
+  simp [shufL, mul_smul, smul_comm s r]
+
+theorem shufL_cons_cons (a b : ℕ) (P R : (Wd →₀ ℤ)) :
+    shufL (consL a P) (consL b R) =
+      consL a (shufL P (consL b R)) + consL b (shufL (consL a P) R) := by
+  induction P using Finsupp.induction_linear with
+  | zero => simp
+  | add P1 P2 h1 h2 => simp only [map_add, LinearMap.add_apply, h1, h2]; abel
+  | single x r =>
+    induction R using Finsupp.induction_linear with
+    | zero => simp
+    | add R1 R2 h1 h2 => simp only [map_add, LinearMap.add_apply, h1, h2]; abel
+    | single y s =>
+      simp only [consL_single, shufL_single', shuf_cons_cons, smul_add, map_smul]
+
+
+theorem shufL_nil_left (Q : (Wd →₀ ℤ)) : shufL (Finsupp.single [] 1) Q = Q := by
+  induction Q using Finsupp.induction_linear with
+  | zero => simp
+  | add Q1 Q2 h1 h2 => simp [h1, h2]
+  | single y s => simp [shufL_single']
+
+theorem shufL_nil_right (P : (Wd →₀ ℤ)) : shufL P (Finsupp.single [] 1) = P := by
+  induction P using Finsupp.induction_linear with
+  | zero => simp
+  | add P1 P2 h1 h2 => simp [h1, h2]
+  | single y s => simp [shufL_single']
+
+theorem assoc_step (a b c : ℕ) (X Y Z : (Wd →₀ ℤ))
+    (IH1 : shufL (shufL X (consL b Y)) (consL c Z) = shufL X (shufL (consL b Y) (consL c Z)))
+    (IH2 : shufL (shufL (consL a X) Y) (consL c Z) = shufL (consL a X) (shufL Y (consL c Z)))
+    (IH3 : shufL (shufL (consL a X) (consL b Y)) Z = shufL (consL a X) (shufL (consL b Y) Z)) :
+    shufL (shufL (consL a X) (consL b Y)) (consL c Z) =
+      shufL (consL a X) (shufL (consL b Y) (consL c Z)) := by
+  have e1 := shufL_cons_cons a b X Y
+  have e2 := shufL_cons_cons b c Y Z
+  have e3 := shufL_cons_cons a c (shufL X (consL b Y)) Z
+  have e4 := shufL_cons_cons b c (shufL (consL a X) Y) Z
+  have e5 := shufL_cons_cons a b X (shufL Y (consL c Z))
+  have e6 := shufL_cons_cons a c X (shufL (consL b Y) Z)
+  have h3 := IH3
+  rw [e1] at h3
+  simp only [map_add, LinearMap.add_apply] at h3
+  rw [e1]
+  simp only [map_add, LinearMap.add_apply]
+  rw [e3, e4, IH1, IH2, e2]
+  simp only [map_add]
+  rw [e5, e6, ← h3]
+  simp only [map_add]
+  abel
+
+
+theorem shufL_assoc_words (n : ℕ) : ∀ x y z : Wd, x.length + y.length + z.length = n →
+    shufL (shufL (Finsupp.single x 1) (Finsupp.single y 1)) (Finsupp.single z 1) =
+      shufL (Finsupp.single x 1) (shufL (Finsupp.single y 1) (Finsupp.single z 1)) := by
+  induction n using Nat.strong_induction_on with
+  | _ n IH =>
+    intro x y z hn
+    rcases x with _ | ⟨a, x'⟩
+    · simp [shufL_nil_left]
+    rcases y with _ | ⟨b, y'⟩
+    · simp [shufL_nil_left, shufL_nil_right]
+    rcases z with _ | ⟨c, z'⟩
+    · simp [shufL_nil_right]
+    simp only [List.length_cons] at hn
+    have h := assoc_step a b c (Finsupp.single x' 1) (Finsupp.single y' 1) (Finsupp.single z' 1)
+      (by simpa using IH (x'.length + (b :: y').length + (c :: z').length) (by simp; omega)
+            x' (b :: y') (c :: z') rfl)
+      (by simpa using IH ((a :: x').length + y'.length + (c :: z').length) (by simp; omega)
+            (a :: x') y' (c :: z') rfl)
+      (by simpa using IH ((a :: x').length + (b :: y').length + z'.length) (by simp; omega)
+            (a :: x') (b :: y') z' rfl)
+    simpa using h
+
+theorem shufL_assoc (P Q R : (Wd →₀ ℤ)) :
+    shufL (shufL P Q) R = shufL P (shufL Q R) := by
+  induction P using Finsupp.induction_linear with
+  | zero => simp
+  | add P1 P2 h1 h2 => simp [h1, h2]
+  | single x r =>
+    induction Q using Finsupp.induction_linear with
+    | zero => simp
+    | add Q1 Q2 h1 h2 => simp [h1, h2]
+    | single y s =>
+      induction R using Finsupp.induction_linear with
+      | zero => simp
+      | add R1 R2 h1 h2 => simp [h1, h2]
+      | single z t =>
+        have h := shufL_assoc_words _ x y z rfl
+        have hx : Finsupp.single x r = r • Finsupp.single x (1 : ℤ) := by simp
+        have hy : Finsupp.single y s = s • Finsupp.single y (1 : ℤ) := by simp
+        have hz : Finsupp.single z t = t • Finsupp.single z (1 : ℤ) := by simp
+        rw [hx, hy, hz]
+        simp only [map_smul, LinearMap.smul_apply, h]
+
+
+theorem shufL_e_cons_cons (a b : ℕ) (u p : Wd) :
+    shufL (Finsupp.single (a :: u) 1) (Finsupp.single (b :: p) 1) =
+      consL a (shufL (Finsupp.single u 1) (Finsupp.single (b :: p) 1)) +
+      consL b (shufL (Finsupp.single (a :: u) 1) (Finsupp.single p 1)) := by
+  have := shufL_cons_cons a b (Finsupp.single u 1) (Finsupp.single p 1)
+  simpa using this
+
+theorem sum_cons_split (a b : ℕ) (f g : ℕ → (Wd →₀ ℤ)) (s : Finset ℕ) :
+    ∑ j ∈ s, ((-1 : ℤ) ^ j) • (consL a (f j) + consL b (g j)) =
+      consL a (∑ j ∈ s, ((-1 : ℤ) ^ j) • f j) + consL b (∑ j ∈ s, ((-1 : ℤ) ^ j) • g j) := by
+  simp [smul_add, Finset.sum_add_distrib, map_sum, map_smul]
+
+theorem antipode_pair (n : ℕ) : ∀ x : Wd, x.length = n →
+    (∀ c, ∑ j ∈ Finset.range (n + 1), ((-1 : ℤ) ^ j) •
+        shufL (Finsupp.single (x.reverse.take j) 1) (Finsupp.single (c :: x.take (n - j)) 1) =
+      ((-1 : ℤ) ^ n) • Finsupp.single (x.reverse ++ [c]) 1) ∧
+    (∀ a, ∑ j ∈ Finset.range (n + 1), ((-1 : ℤ) ^ j) •
+        shufL (Finsupp.single (a :: x.reverse.take j) 1) (Finsupp.single (x.take (n - j)) 1) =
+      Finsupp.single (x ++ [a]) 1) := by
+  induction n with
+  | zero =>
+    intro x hx
+    obtain rfl : x = [] := List.length_eq_zero_iff.mp hx
+    simp [shufL_nil_left, shufL_nil_right]
+  | succ n IH =>
+    intro x hx
+    constructor
+    · intro c
+      rcases List.eq_nil_or_concat x with rfl | ⟨x', e', rfl⟩
+      · simp at hx
+      simp only [List.concat_eq_append] at hx ⊢
+      have hlen : x'.length = n := by simpa using hx
+      obtain ⟨IA, IQ⟩ := IH x' hlen
+      rw [Finset.sum_range_succ']
+      have hterm : ∀ i ∈ Finset.range (n + 1),
+          ((-1 : ℤ) ^ (i + 1)) • shufL
+            (Finsupp.single ((x' ++ [e']).reverse.take (i + 1)) 1)
+            (Finsupp.single (c :: (x' ++ [e']).take (n + 1 - (i + 1))) 1) =
+          -((consL e' (((-1 : ℤ) ^ i) • shufL (Finsupp.single (x'.reverse.take i) 1)
+              (Finsupp.single (c :: x'.take (n - i)) 1))) +
+            consL c (((-1 : ℤ) ^ i) • shufL (Finsupp.single (e' :: x'.reverse.take i) 1)
+              (Finsupp.single (x'.take (n - i)) 1))) := by
+        intro i hi
+        have hi' : i ≤ n := by simpa [Nat.lt_succ_iff] using hi
+        have h1 : (x' ++ [e']).reverse.take (i + 1) = e' :: x'.reverse.take i := by simp
+        have h2 : (x' ++ [e']).take (n + 1 - (i + 1)) = x'.take (n - i) := by
+          rw [show n + 1 - (i + 1) = n - i by omega]
+          exact List.take_append_of_le_length (by omega)
+        rw [h1, h2, shufL_e_cons_cons, pow_succ]
+        simp [map_smul, smul_add]
+        abel
+      rw [Finset.sum_congr rfl hterm]
+      have hsum : ∑ i ∈ Finset.range (n + 1),
+          -((consL e' (((-1 : ℤ) ^ i) • shufL (Finsupp.single (x'.reverse.take i) 1)
+              (Finsupp.single (c :: x'.take (n - i)) 1))) +
+            consL c (((-1 : ℤ) ^ i) • shufL (Finsupp.single (e' :: x'.reverse.take i) 1)
+              (Finsupp.single (x'.take (n - i)) 1))) =
+          -(consL e' (∑ i ∈ Finset.range (n + 1), ((-1 : ℤ) ^ i) •
+              shufL (Finsupp.single (x'.reverse.take i) 1)
+                (Finsupp.single (c :: x'.take (n - i)) 1)) +
+            consL c (∑ i ∈ Finset.range (n + 1), ((-1 : ℤ) ^ i) •
+              shufL (Finsupp.single (e' :: x'.reverse.take i) 1)
+                (Finsupp.single (x'.take (n - i)) 1))) := by
+        simp [Finset.sum_neg_distrib, Finset.sum_add_distrib, map_sum]
+      rw [hsum, IA c, IQ e']
+      have ht : (x' ++ [e']).take (n + 1 - 0) = x' ++ [e'] := by
+        apply List.take_of_length_le; simp [hlen]
+      rw [ht]
+      simp [shufL_nil_left, pow_succ, map_smul]
+    · intro a
+      rcases x with _ | ⟨d, x''⟩
+      · simp at hx
+      have hlen : x''.length = n := by simpa using hx
+      obtain ⟨IA, IQ⟩ := IH x'' hlen
+      rw [Finset.sum_range_succ]
+      have hterm : ∀ j ∈ Finset.range (n + 1),
+          ((-1 : ℤ) ^ j) • shufL
+            (Finsupp.single (a :: (d :: x'').reverse.take j) 1)
+            (Finsupp.single ((d :: x'').take (n + 1 - j)) 1) =
+          ((-1 : ℤ) ^ j) • (consL a (shufL (Finsupp.single (x''.reverse.take j) 1)
+              (Finsupp.single (d :: x''.take (n - j)) 1)) +
+            consL d (shufL (Finsupp.single (a :: x''.reverse.take j) 1)
+              (Finsupp.single (x''.take (n - j)) 1))) := by
+        intro j hj
+        have hj' : j ≤ n := by simpa [Nat.lt_succ_iff] using hj
+        have h1 : (d :: x'').reverse.take j = x''.reverse.take j := by
+          rw [List.reverse_cons]
+          exact List.take_append_of_le_length (by simpa [hlen] using hj')
+        have h2 : (d :: x'').take (n + 1 - j) = d :: x''.take (n - j) := by
+          rw [show n + 1 - j = (n - j) + 1 by omega]; rfl
+        rw [h1, h2, shufL_e_cons_cons]
+      rw [Finset.sum_congr rfl hterm, sum_cons_split a d, IA d, IQ a]
+      have h3 : (d :: x'').reverse.take (n + 1) = x''.reverse ++ [d] := by
+        rw [List.reverse_cons]
+        exact List.take_of_length_le (by simp [hlen])
+      rw [h3]
+      simp [shufL_nil_right, pow_succ, map_smul]
+
+theorem sum_shuf_cons_eq (a : ℕ) (p : Wd) (V : (Wd →₀ ℤ)) :
+    V.sum (fun w c => c • shuf (a :: w) p) = shufL (consL a V) (Finsupp.single p 1) := by
+  induction V using Finsupp.induction_linear with
+  | zero => simp
+  | add V1 V2 h1 h2 =>
+    rw [Finsupp.sum_add_index' (by simp) (by intros; simp [add_smul]), h1, h2]; simp
+  | single w r => simp [shufL_single']
+
+theorem lemma_2_26_aux (a : ℕ) (y' : Wd) : ∀ x : Wd,
+    ∑ j ∈ Finset.range (x.length + 1), ((-1 : ℤ) ^ j) •
+      shufL (consL a (shufL (Finsupp.single y' 1) (Finsupp.single (x.reverse.take j) 1)))
+        (Finsupp.single (x.take (x.length - j)) 1) =
+      Finsupp.single (x ++ a :: y') 1 := by
+  intro x
+  induction x with
+  | nil => simp [shufL_nil_right]
+  | cons d x'' IH =>
+    have hlen := (antipode_pair x''.length x'' rfl).1 d
+    rw [List.length_cons, Finset.sum_range_succ]
+    have hterm : ∀ j ∈ Finset.range (x''.length + 1),
+        ((-1 : ℤ) ^ j) • shufL
+          (consL a (shufL (Finsupp.single y' 1) (Finsupp.single ((d :: x'').reverse.take j) 1)))
+          (Finsupp.single ((d :: x'').take (x''.length + 1 - j)) 1) =
+        ((-1 : ℤ) ^ j) • (consL a (shufL (shufL (Finsupp.single y' 1)
+            (Finsupp.single (x''.reverse.take j) 1))
+            (Finsupp.single (d :: x''.take (x''.length - j)) 1)) +
+          consL d (shufL (consL a (shufL (Finsupp.single y' 1)
+            (Finsupp.single (x''.reverse.take j) 1)))
+            (Finsupp.single (x''.take (x''.length - j)) 1))) := by
+      intro j hj
+      have hj' : j ≤ x''.length := by simpa [Nat.lt_succ_iff] using hj
+      have h1 : (d :: x'').reverse.take j = x''.reverse.take j := by
+        rw [List.reverse_cons]
+        exact List.take_append_of_le_length (by simpa using hj')
+      have h2 : (d :: x'').take (x''.length + 1 - j) = d :: x''.take (x''.length - j) := by
+        rw [show x''.length + 1 - j = (x''.length - j) + 1 by omega]; rfl
+      rw [h1, h2]
+      have hd : Finsupp.single (d :: x''.take (x''.length - j)) (1 : ℤ) =
+          consL d (Finsupp.single (x''.take (x''.length - j)) 1) := by simp
+      conv_lhs => rw [hd, shufL_cons_cons]
+      simp only [consL_single]
+    rw [Finset.sum_congr rfl hterm, sum_cons_split a d]
+    have hA : ∑ j ∈ Finset.range (x''.length + 1), ((-1 : ℤ) ^ j) •
+        shufL (shufL (Finsupp.single y' 1) (Finsupp.single (x''.reverse.take j) 1))
+          (Finsupp.single (d :: x''.take (x''.length - j)) 1) =
+        shufL (Finsupp.single y' 1) (((-1 : ℤ) ^ x''.length) •
+          Finsupp.single (x''.reverse ++ [d]) 1) := by
+      rw [← hlen, map_sum]
+      refine Finset.sum_congr rfl fun j _ => ?_
+      simp [shufL_assoc, map_smul]
+    rw [hA, IH]
+    have h3 : (d :: x'').reverse.take (x''.length + 1) = x''.reverse ++ [d] := by
+      rw [List.reverse_cons]
+      exact List.take_of_length_le (by simp)
+    rw [h3]
+    simp [shufL_nil_right, pow_succ, map_smul, shufL_single']
+    try abel
+
+end ShuffleAlg
+
 /-- **Lemma 2.26.** For disjoint words `β = x₁ ⋯ xₙ` (`n > 0`) and `γ = y₀ y₁ ⋯ y_m`,
 `βγ = ∑_{k=0}^{n} (-1)^k y₀ (y₁⋯y_m ⊙ x_n ⋯ x_{n-k+1}) ⊙ x₁ ⋯ x_{n-k}`
 in the free module on words (concatenation on the left of `⊙`...).
@@ -1813,7 +2102,14 @@ theorem lemma_2_26 (x y : Wd) (hx : x ≠ []) (hy : y ≠ []) (hxy : (x ++ y).No
     Finsupp.single (x ++ y) (1 : ℤ) =
       ∑ j ∈ Finset.range (x.length + 1), ((-1 : ℤ) ^ j) •
         Finsupp.sum (shuf y.tail (x.reverse.take j)) fun w c =>
-          c • shuf (y.head! :: w) (x.take (x.length - j)) := sorry
+          c • shuf (y.head! :: w) (x.take (x.length - j)) := by
+  obtain ⟨a, y', rfl⟩ : ∃ a y', y = a :: y' := by
+    rcases y with _ | ⟨a, y'⟩
+    · exact absurd rfl hy
+    · exact ⟨a, y', rfl⟩
+  simp only [List.tail_cons, List.head!_cons, ShuffleAlg.sum_shuf_cons_eq]
+  have h := ShuffleAlg.lemma_2_26_aux a y' x
+  simpa only [ShuffleAlg.shufL_single] using h.symm
 
 /-- **Lemma 2.25.** The system (2.19) is highly redundant: if `μ(σ' ⊗ τ') = 0` for all pairs in
 which the first letter of `σ'` is `1` (on any `{1..k}`, `k ≤ t`), then `μ(σ ⊗ τ) = 0` for every

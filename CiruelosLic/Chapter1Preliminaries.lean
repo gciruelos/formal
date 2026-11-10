@@ -631,7 +631,7 @@ theorem completeDevelopment_unique {t : R.Obj} {M : Finset R.Adr}
     h (minBound hR hM) t M hM le_rfl hσ hτ
   intro k
   induction k using Nat.strong_induction_on with
-  | h k ih =>
+  | ind k ih =>
     intro t M hM hk σ τ hσ hτ
     cases σ with
     | nil =>
@@ -916,7 +916,7 @@ theorem permGen_of_completeDevelopment (hR : R.Orthogonal) {t : R.Obj} {M : Fins
     h (minBound hR hM) t M hM le_rfl hσ hτ
   intro k
   induction k using Nat.strong_induction_on with
-  | h k ih =>
+  | ind k ih =>
     intro t M hM hk σ τ hσ hτ
     cases σ with
     | nil =>

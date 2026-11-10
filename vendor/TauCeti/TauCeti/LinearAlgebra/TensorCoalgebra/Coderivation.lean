@@ -1,0 +1,589 @@
+/-
+Copyright (c) 2026 The Tau Ceti contributors. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: The Tau Ceti contributors
+-/
+module
+
+public import TauCeti.Algebra.BigOperators.Finset.Range
+public import TauCeti.LinearAlgebra.TensorCoalgebra.Filtration
+public import TauCeti.LinearAlgebra.TensorProduct.Submodule
+public import TauCeti.LinearAlgebra.TensorCoalgebra.Splice
+
+/-!
+# Coderivations of the reduced tensor coalgebra
+
+For an `R`-module `M`, the reduced tensor words `⨁_{n ≥ 1} M^{⊗n}` carry the reduced
+deconcatenation coproduct `Δ` built in `TauCeti.ReducedTensorWords.deconcatenation`.  A
+*coderivation* is a linear endomorphism `b` satisfying the co-Leibniz rule
+`Δ ∘ b = (b ⊗ 1 + 1 ⊗ b) ∘ Δ`.  This file proves that coderivations are exactly their Taylor
+components: composing with the projection `letter` onto single letters is a linear isomorphism
+from the coderivations onto the linear maps `⨁_{n ≥ 1} M^{⊗n} ⟶ M`.
+
+That coderivations are *determined* by their Taylor components is an induction along the
+conilpotence filtration: a word of length at most `n + 1` is cut into two words of length at most
+`n`, so the right-hand side of the co-Leibniz rule is already known by induction, and a tensor word
+is determined by its cut together with its letter.  That *every* family of components occurs is the
+explicit Taylor expansion `coderiv`, which collapses each nonempty block of letters of a word to the
+single letter the components produce from that block.  Verifying its co-Leibniz rule is a
+reindexing: on both sides the summands are indexed by a cut position together with a collapsed
+block, and a cut never splits a block nor the letter that replaced one.
+
+This is the encoding in which an `A∞` algebra is a square-zero coderivation of the bar coalgebra of
+a suspended graded module, and its Taylor components are the operations `m_n`; that use is
+downstream, in the `DGAInfinity` roadmap.
+
+## Main definitions
+
+* `TauCeti.ReducedTensorWords.IsCoderivation`: the co-Leibniz rule.
+* `TauCeti.ReducedTensorWords.coderiv`: the coderivation with prescribed Taylor components.
+* `TauCeti.ReducedTensorWords.coderivations`: the submodule of coderivations.
+* `LinearMap.taylorComponent`: the arity component of a linear endomorphism of reduced tensor
+  words.
+
+## Main results
+
+* `TauCeti.ReducedTensorWords.IsCoderivation.eq_of_letter_comp_eq`: a coderivation is determined by
+  its Taylor components.
+* `TauCeti.ReducedTensorWords.isCoderivation_coderiv` and
+  `TauCeti.ReducedTensorWords.letter_comp_coderiv`: `coderiv F` is a coderivation with Taylor
+  components `F`.
+* `TauCeti.ReducedTensorWords.coderiv_filtration_add_le`: a coderivation whose Taylor map
+  vanishes on the words of length at most `j` lowers tensor length by at least `j`.
+* `TauCeti.ReducedTensorWords.coderivEquivTaylor`: coderivations are linearly isomorphic to their
+  Taylor components.
+* `TauCeti.ReducedTensorWords.IsCoderivation.eq_zero_iff_taylorComponent_eq_zero`: a coderivation
+  vanishes exactly when all of its arity components vanish.
+
+## References
+
+* E. Getzler and J. D. S. Jones, *A-infinity algebras and the cyclic bar complex*, Sections 1--2.
+* B. Keller, *Introduction to A-infinity algebras and modules*, Sections 3.1 and 3.6.
+-/
+public section
+
+open scoped BigOperators DirectSum TensorProduct
+
+universe uR uM
+
+namespace TauCeti
+
+namespace ReducedTensorWords
+
+variable (R : Type uR) {M : Type uM} [CommSemiring R] [AddCommMonoid M] [Module R M]
+
+/-- Evaluation of a concatenated tuple at an index that is not presented as an index of one of
+the two factors. -/
+private theorem append_eq_dite {α : Type*} {k l : ℕ} (u : Fin k → α) (v : Fin l → α)
+    (i : Fin (k + l)) :
+    Fin.append u v i = if hi : i.1 < k then u ⟨i.1, hi⟩ else v ⟨i.1 - k, by omega⟩ := by
+  induction i using Fin.addCases with
+  | left j =>
+      have hj : (Fin.castAdd l j).1 < k := j.isLt
+      rw [Fin.append_left, dite_eq_left hj]
+      rfl
+  | right j =>
+      have hj : ¬(Fin.natAdd k j).1 < k := by
+        simp only [Fin.val_natAdd]
+        omega
+      have hj_sub : (j : ℕ) = k + (j : ℕ) - k := by omega
+      rw [Fin.append_right, dite_eq_right hj]
+      exact congrArg v (Fin.ext hj_sub)
+
+/-- The `(p, d)` summand of the Taylor expansion of a coderivation with components `F`, on tensor
+words of length `n`: collapse the `d` letters at position `p` to the single letter that `F`
+produces from them.
+
+It is zero unless the collapsed block is nonempty and fits, that is unless `0 < d` and
+`p + d ≤ n`.
+
+This is an implementation device for the coderivation/Taylor correspondence, kept public because
+the graded, signed correspondence in
+`TauCeti.LinearAlgebra.TensorCoalgebra.GradedCoderivation` precomposes it with a twist of the
+letters preceding the collapsed block. -/
+noncomputable def coderivSummand (F : ReducedTensorWords R M →ₗ[R] M) (n p d : ℕ) :
+    TensorPower R n M →ₗ[R] ReducedTensorWords R M :=
+  if h : 0 < d ∧ p + d ≤ n then
+    let hlength : p + (1 + (n - p - d)) = n + 1 - d := by omega
+    of R M ⟨n + 1 - d, by omega⟩ ∘ₗ
+      (TensorPower.cast R M hlength).toLinearMap ∘ₗ
+      (TensorPower.mulEquiv (R := R) (M := M)).toLinearMap ∘ₗ
+      LinearMap.lTensor (TensorPower R p M)
+        ((TensorPower.mulEquiv (R := R) (M := M)).toLinearMap ∘ₗ
+          LinearMap.rTensor (TensorPower R (n - p - d) M)
+            ((TauCeti.TensorPower.oneEquiv R M).symm.toLinearMap ∘ₗ F ∘ₗ of R M ⟨d, h.1⟩)) ∘ₗ
+      LinearMap.lTensor (TensorPower R p M) (TensorPower.splitAt R M (n - p) d (by omega)) ∘ₗ
+      TensorPower.splitAt R M n p (by omega)
+  else 0
+
+/-- Outside its range a Taylor summand vanishes. -/
+theorem coderivSummand_eq_zero (F : ReducedTensorWords R M →ₗ[R] M) {n p d : ℕ}
+    (h : ¬(0 < d ∧ p + d ≤ n)) : coderivSummand R F n p d = 0 := by
+  rw [coderivSummand, dite_eq_right h]
+
+/-- On a pure tensor word, a Taylor summand is the splice of the value of `F` on the collapsed
+block. -/
+theorem coderivSummand_tprod (F : ReducedTensorWords R M →ₗ[R] M) {n p d : ℕ} (hd : 0 < d)
+    (hpd : p + d ≤ n) (x : Fin n → M) :
+    coderivSummand R F n p d (PiTensorProduct.tprod R x) =
+      splice R x 0 n p d (F (subword R x p d)) := by
+  rw [coderivSummand, dite_eq_left ⟨hd, hpd⟩]
+  simp only [LinearMap.coe_comp, Function.comp_apply, LinearEquiv.coe_coe,
+    TensorPower.splitAt_tprod, LinearMap.lTensor_tmul, LinearMap.rTensor_tmul,
+    TauCeti.TensorPower.oneEquiv_symm_apply, ← TensorPower.gMul_def,
+    TensorPower.tprod_mul_tprod, TensorPower.cast_tprod, Fin.val_castLE]
+  rw [← subword_eq_of_tprod R x (a := p) (b := d) hd (by omega),
+    splice_eq_of_tprod R x _ hd (by omega) (by omega)]
+  refine of_tprod_congr R M _ rfl fun i ↦ ?_
+  rw [Function.comp_apply, append_eq_dite]
+  simp only [Fin.val_cast]
+  by_cases h₁ : i.1 < p
+  · rw [dite_eq_left h₁, dite_eq_left h₁]
+    exact congrArg x (Fin.ext (by simp only [Fin.val_castLE]; omega))
+  · rw [dite_eq_right h₁, dite_eq_right h₁, append_eq_dite]
+    by_cases h₂ : i.1 = p
+    · have hi_sub : i.1 - p < 1 := by omega
+      rw [dite_eq_left hi_sub, dite_eq_left h₂]
+    · have hi_sub : ¬i.1 - p < 1 := by omega
+      rw [dite_eq_right hi_sub, dite_eq_right h₂]
+      exact congrArg x (by simp only [Fin.mk.injEq]; omega)
+
+
+/-- The linear endomorphism of the reduced tensor coalgebra whose Taylor components are `F`: on a
+tensor word it collapses each nonempty block of letters to the single letter that `F` produces
+from that block, and sums over all blocks. -/
+noncomputable def coderiv (F : ReducedTensorWords R M →ₗ[R] M) :
+    ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M :=
+  DirectSum.toModule R {n : ℕ // 0 < n} _ fun n ↦
+    ∑ p ∈ Finset.range n.1, ∑ d ∈ Finset.range (n.1 + 1), coderivSummand R F n.1 p d
+
+/-- Evaluation of `coderiv F` on a homogeneous tensor word `of R M n z`: the sum, over a position
+`p` and a block length `d`, of the Taylor summands collapsing the `d` letters at position `p`.
+
+The public form of this evaluation rule is `TauCeti.ReducedTensorWords.coderiv_subword`, which
+states the same sum in terms of `TauCeti.ReducedTensorWords.splice`. -/
+private theorem coderiv_of (F : ReducedTensorWords R M →ₗ[R] M) (n : {n : ℕ // 0 < n})
+    (z : TensorPower R n.1 M) :
+    coderiv R F (of R M n z) =
+      ∑ p ∈ Finset.range n.1, ∑ d ∈ Finset.range (n.1 + 1), coderivSummand R F n.1 p d z := by
+  rw [coderiv, toModule_of]
+  simp only [LinearMap.sum_apply]
+
+/-- A Taylor summand on a tensor word that is a block of a longer tuple, read back in that
+tuple. -/
+theorem coderivSummand_tprod_of_eq (F : ReducedTensorWords R M →ₗ[R] M) {n b : ℕ}
+    (x : Fin n → M) (y : Fin b → M) {a : ℕ} (hab : a + b ≤ n)
+    (hy : ∀ (j : ℕ) (hj : j < b), y ⟨j, hj⟩ = x ⟨a + j, by omega⟩) (p d : ℕ) :
+    coderivSummand R F b p d (PiTensorProduct.tprod R y) =
+      splice R x a b p d (F (subword R x (a + p) d)) := by
+  by_cases h : 0 < d ∧ p + d ≤ b
+  · rw [coderivSummand_tprod R F h.1 h.2,
+      subword_congr R y x (a := p) (a' := a + p) (by omega) (by omega) fun j hj ↦ by
+        rw [hy (p + j) (by omega)]
+        exact congrArg x (by simp only [Fin.mk.injEq]; omega)]
+    exact splice_congr R y x _ (by omega) (by omega) fun j hj ↦ by
+      rw [hy (0 + j) (by omega)]
+      exact congrArg x (by simp only [Fin.mk.injEq]; omega)
+  · rw [coderivSummand_eq_zero R F h, LinearMap.zero_apply, splice_eq_zero_of_not_fits R x _ h]
+
+/-- The Taylor expansion of `coderiv F` on a block of a tensor word.  The two ranges may be taken
+as large as convenient, since a summand whose collapsed block does not fit inside the block
+vanishes; that is what lets the expansions of a word and of its two halves be summed over one
+common range. -/
+theorem coderiv_subword (F : ReducedTensorWords R M →ₗ[R] M) {n : ℕ} (x : Fin n → M) {a b K : ℕ}
+    (hK : b ≤ K) :
+    coderiv R F (subword R x a b) =
+      ∑ p ∈ Finset.range K, ∑ d ∈ Finset.range (K + 1),
+        splice R x a b p d (F (subword R x (a + p) d)) := by
+  by_cases hab : a + b ≤ n
+  · have hvanish : ∀ p d : ℕ, b ≤ p ∨ b < d →
+        splice R x a b p d (F (subword R x (a + p) d)) = 0 := fun p d h ↦
+      splice_eq_zero_of_not_fits R x _ (by omega)
+    rcases Nat.eq_zero_or_pos b with rfl | hb
+    · rw [subword_length_zero, map_zero]
+      exact (Finset.sum_eq_zero fun p _ ↦ Finset.sum_eq_zero fun d _ ↦
+        hvanish p d (Or.inl (Nat.zero_le p))).symm
+    rw [subword_eq_of_tprod R x hb hab, coderiv_of,
+      ← sum_sum_range_eq_of_eq_zero_right hK _ hvanish]
+    exact Finset.sum_congr rfl fun p _ ↦ Finset.sum_congr rfl fun d _ ↦
+      coderivSummand_tprod_of_eq R F x _ hab (fun j hj ↦ rfl) p d
+  · rw [subword_eq_zero_of_lt_add R x (by omega), map_zero]
+    symm
+    exact Finset.sum_eq_zero fun p _ ↦ Finset.sum_eq_zero fun d _ ↦
+      splice_eq_zero_of_length_lt_add R x _ (by omega)
+
+/-! ### Tensor-length bounds -/
+
+/-- A coderivation whose Taylor map vanishes on the words of length at most `j` lowers tensor
+length by at least `j`: each of its summands collapses a block of more than `j` letters to a single
+letter. -/
+theorem coderiv_filtration_add_le (F : ReducedTensorWords R M →ₗ[R] M) {j : ℕ}
+    (hF : ∀ z ∈ filtration R M j, F z = 0) (n : ℕ) :
+    Submodule.map (coderiv R F) (filtration R M (n + j)) ≤ filtration R M n := by
+  rw [Submodule.map_le_iff_le_comap, filtration_le_iff]
+  intro k hk
+  rintro _ ⟨z, rfl⟩
+  simp only [Submodule.mem_comap]
+  induction z using PiTensorProduct.induction_on with
+  | smul_tprod a x =>
+      rw [map_smul, map_smul, of_tprod_eq_subword R k.2, coderiv_subword R F x le_rfl]
+      exact Submodule.smul_mem _ _ (Submodule.sum_mem _ fun p _ ↦ Submodule.sum_mem _ fun d _ ↦
+        splice_apply_subword_mem_filtration R F hF x hk x _ _ _ _)
+  | add x y hx hy =>
+      rw [map_add, map_add]
+      exact add_mem hx hy
+
+/-- A coderivation with no unary Taylor component lowers tensor length by at least one. -/
+theorem coderiv_filtration_lowering (F : ReducedTensorWords R M →ₗ[R] M)
+    (hF : F ∘ₗ ofLetter R M = 0) (n : ℕ) :
+    Submodule.map (coderiv R F) (filtration R M (n + 1)) ≤ filtration R M n :=
+  coderiv_filtration_add_le R F (apply_eq_zero_of_mem_filtration_one R M hF) n
+
+/-- A coderivation does not increase tensor length. -/
+theorem coderiv_mem_filtration (F : ReducedTensorWords R M →ₗ[R] M) {n : ℕ}
+    {z : ReducedTensorWords R M} (hz : z ∈ filtration R M n) :
+    coderiv R F z ∈ filtration R M n :=
+  coderiv_filtration_add_le R F (apply_eq_zero_of_mem_filtration_zero R M F) n ⟨z, hz, rfl⟩
+
+/-- The `n`-th power of a coderivation with no unary Taylor component kills the words of length at
+most `n`. -/
+theorem pow_coderiv_apply_eq_zero_of_mem_filtration {F : ReducedTensorWords R M →ₗ[R] M}
+    (hF : F ∘ₗ ofLetter R M = 0) {n : ℕ} {z : ReducedTensorWords R M}
+    (hz : z ∈ filtration R M n) : (coderiv R F ^ n) z = 0 :=
+  pow_apply_eq_zero_of_filtration_lowering R M _ (coderiv_filtration_lowering R F hF) hz
+
+
+/-- A linear endomorphism of the reduced tensor coalgebra is a *coderivation* when it satisfies
+the co-Leibniz rule: cutting its value is the same as cutting first and applying it to one of the
+two halves. -/
+def IsCoderivation (b : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M) : Prop :=
+  deconcatenation R M ∘ₗ b =
+    (LinearMap.rTensor (ReducedTensorWords R M) b +
+        LinearMap.lTensor (ReducedTensorWords R M) b) ∘ₗ deconcatenation R M
+
+variable {R}
+
+/-- The co-Leibniz rule of a coderivation, applied to an element. -/
+theorem IsCoderivation.deconcatenation_apply
+    {b : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M} (hb : IsCoderivation R b)
+    (z : ReducedTensorWords R M) :
+    deconcatenation R M (b z) =
+      LinearMap.rTensor (ReducedTensorWords R M) b (deconcatenation R M z) +
+        LinearMap.lTensor (ReducedTensorWords R M) b (deconcatenation R M z) :=
+  LinearMap.congr_fun hb z
+
+/-- The co-Leibniz identity of a coderivation, as a reusable `Iff`: this exposes the body of
+`IsCoderivation` to consumers in other modules, for which the definition's body is not exposed. -/
+theorem isCoderivation_iff {b : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M} :
+    IsCoderivation R b ↔
+      (deconcatenation R M ∘ₗ b =
+        (LinearMap.rTensor (ReducedTensorWords R M) b +
+            LinearMap.lTensor (ReducedTensorWords R M) b) ∘ₗ deconcatenation R M) :=
+  Iff.rfl
+
+/-- Two endomorphisms satisfying the same twisted co-Leibniz identity
+`Δ ∘ b = (b ⊗ 1) ∘ Δ + (1 ⊗ b) ∘ (τ ⊗ 1) ∘ Δ` and agreeing after projection onto letters are
+equal, by induction along the conilpotence filtration.  This is the determinedness argument
+shared by `IsCoderivation.eq_of_letter_comp_eq` (with `τ = LinearMap.id`) and
+`IsGradedCoderivation.eq_of_letter_comp_eq`. -/
+theorem eq_of_letter_comp_eq_of_twist
+    {b₁ b₂ τ : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M}
+    (h₁ : deconcatenation R M ∘ₗ b₁ =
+      LinearMap.rTensor (ReducedTensorWords R M) b₁ ∘ₗ deconcatenation R M +
+        (LinearMap.lTensor (ReducedTensorWords R M) b₁ ∘ₗ
+          LinearMap.rTensor (ReducedTensorWords R M) τ) ∘ₗ deconcatenation R M)
+    (h₂ : deconcatenation R M ∘ₗ b₂ =
+      LinearMap.rTensor (ReducedTensorWords R M) b₂ ∘ₗ deconcatenation R M +
+        (LinearMap.lTensor (ReducedTensorWords R M) b₂ ∘ₗ
+          LinearMap.rTensor (ReducedTensorWords R M) τ) ∘ₗ deconcatenation R M)
+    (hl : letter R M ∘ₗ b₁ = letter R M ∘ₗ b₂) : b₁ = b₂ := by
+  have hletter : ∀ z, letter R M (b₁ z) = letter R M (b₂ z) := LinearMap.congr_fun hl
+  have happly₁ : ∀ z, deconcatenation R M (b₁ z) =
+      LinearMap.rTensor (ReducedTensorWords R M) b₁ (deconcatenation R M z) +
+        LinearMap.lTensor (ReducedTensorWords R M) b₁
+          (LinearMap.rTensor (ReducedTensorWords R M) τ (deconcatenation R M z)) :=
+    LinearMap.congr_fun h₁
+  have happly₂ : ∀ z, deconcatenation R M (b₂ z) =
+      LinearMap.rTensor (ReducedTensorWords R M) b₂ (deconcatenation R M z) +
+        LinearMap.lTensor (ReducedTensorWords R M) b₂
+          (LinearMap.rTensor (ReducedTensorWords R M) τ (deconcatenation R M z)) :=
+    LinearMap.congr_fun h₂
+  have key : ∀ n : ℕ, ∀ z ∈ filtration R M n, b₁ z = b₂ z := by
+    intro n
+    induction n with
+    | zero =>
+        intro z hz
+        rw [filtration_zero] at hz
+        rw [(Submodule.mem_bot R).1 hz, map_zero, map_zero]
+    | succ n ih =>
+        intro z hz
+        refine eq_of_deconcatenation_eq_of_letter_eq R M ?_ (hletter z)
+        obtain ⟨w, hw⟩ := map_deconcatenation_filtration_succ_le R M n ⟨z, hz, rfl⟩
+        rw [happly₁, happly₂, ← hw]
+        exact Submodule.rTensor_add_lTensor_rTensor_congr _ _ ih ih w
+  refine LinearMap.ext fun z ↦ ?_
+  obtain ⟨n, hn⟩ := exists_mem_filtration R M z
+  exact key n z hn
+
+/-- A coderivation of the reduced tensor coalgebra is determined by its Taylor components, that is
+by its composite with the projection onto single letters.  Two coderivations agreeing there agree
+on every tensor word, by induction along the conilpotence filtration. -/
+theorem IsCoderivation.eq_of_letter_comp_eq
+    {b₁ b₂ : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M} (h₁ : IsCoderivation R b₁)
+    (h₂ : IsCoderivation R b₂) (hl : letter R M ∘ₗ b₁ = letter R M ∘ₗ b₂) : b₁ = b₂ := by
+  refine eq_of_letter_comp_eq_of_twist (τ := LinearMap.id) ?_ ?_ hl
+  · rw [isCoderivation_iff] at h₁
+    rwa [LinearMap.rTensor_id, LinearMap.comp_id, ← LinearMap.add_comp]
+  · rw [isCoderivation_iff] at h₂
+    rwa [LinearMap.rTensor_id, LinearMap.comp_id, ← LinearMap.add_comp]
+
+variable (R)
+
+/-- The comultiplication of `coderiv F` on a full word, expanded as the sum over a cut position and
+a collapsed block, with the cut either before or after the block. -/
+private theorem deconcatenation_coderiv_subword_zero (F : ReducedTensorWords R M →ₗ[R] M) {n : ℕ}
+    (x : Fin n → M) :
+    deconcatenation R M (coderiv R F (subword R x 0 n)) =
+      (∑ p ∈ Finset.range n, ∑ d ∈ Finset.range (n + 1), ∑ c ∈ Finset.range (p + 1),
+          subword R x 0 c ⊗ₜ[R]
+            splice R x c (n - c) (p - c) d (F (subword R x p d))) +
+        ∑ p ∈ Finset.range n, ∑ d ∈ Finset.range (n + 1), ∑ c ∈ Finset.range n,
+          splice R x 0 c p d (F (subword R x p d)) ⊗ₜ[R] subword R x c (n - c) := by
+  rw [coderiv_subword R F x (a := 0) (b := n) (K := n) (le_refl n), map_sum,
+    ← Finset.sum_add_distrib]
+  refine Finset.sum_congr rfl fun p _ ↦ ?_
+  rw [map_sum, ← Finset.sum_add_distrib]
+  refine Finset.sum_congr rfl fun d _ ↦ ?_
+  rw [deconcatenation_splice R x _]
+  simp only [Nat.zero_add]
+
+/-- The right-hand side of the co-Leibniz rule for `coderiv F` on a full word, expanded as a sum
+over a cut position and a collapsed block. -/
+private theorem rTensor_add_lTensor_coderiv_deconcatenation_subword_zero
+    (F : ReducedTensorWords R M →ₗ[R] M) {n : ℕ} (x : Fin n → M) :
+    LinearMap.rTensor (ReducedTensorWords R M) (coderiv R F)
+        (deconcatenation R M (subword R x 0 n)) +
+      LinearMap.lTensor (ReducedTensorWords R M) (coderiv R F)
+        (deconcatenation R M (subword R x 0 n)) =
+      (∑ c ∈ Finset.range n, ∑ p ∈ Finset.range n, ∑ d ∈ Finset.range (n + 1),
+          splice R x 0 c p d (F (subword R x p d)) ⊗ₜ[R] subword R x c (n - c)) +
+        ∑ c ∈ Finset.range n, ∑ p ∈ Finset.range n, ∑ d ∈ Finset.range (n + 1),
+          subword R x 0 c ⊗ₜ[R]
+            splice R x c (n - c) p d (F (subword R x (c + p) d)) := by
+  have h : deconcatenation R M (subword R x 0 n) =
+      ∑ c ∈ Finset.range n, subword R x 0 c ⊗ₜ[R] subword R x c (n - c) := by
+    simpa using map_deconcatenation_subword R LinearMap.id LinearMap.id x 0 n
+  rw [h, map_sum, map_sum]
+  congr 1 <;> refine Finset.sum_congr rfl fun c hc ↦ ?_ <;>
+    simp only [Finset.mem_range] at hc
+  · rw [LinearMap.rTensor_tmul,
+      coderiv_subword R F x (a := 0) (b := c) (K := n) (by omega),
+      TensorProduct.sum_tmul]
+    exact Finset.sum_congr rfl fun p _ ↦ by
+      rw [TensorProduct.sum_tmul]
+      simp only [Nat.zero_add]
+  · rw [LinearMap.lTensor_tmul,
+      coderiv_subword R F x (a := c) (b := n - c) (K := n) (by omega),
+      TensorProduct.tmul_sum]
+    exact Finset.sum_congr rfl fun p _ ↦ by rw [TensorProduct.tmul_sum]
+
+/-- `coderiv F` is a coderivation.  Both sides of the co-Leibniz rule are the sum, over a cut
+position and a collapsed block, of the tensor of the two halves with the block collapsed in
+whichever half contains it; a block is never split by a cut, and a cut never splits the new
+letter. -/
+@[simp]
+theorem isCoderivation_coderiv (F : ReducedTensorWords R M →ₗ[R] M) :
+    IsCoderivation R (coderiv R F) := by
+  refine linearMap_ext R M fun n x ↦ ?_
+  have hn : 0 < n.1 := n.2
+  simp only [LinearMap.coe_comp, Function.comp_apply, LinearMap.add_apply]
+  rw [of_tprod_eq_subword R hn x]
+  rw [deconcatenation_coderiv_subword_zero R F x,
+    rTensor_add_lTensor_coderiv_deconcatenation_subword_zero R F x, add_comm]
+  congr 1
+  · exact Eq.trans (Finset.sum_congr rfl fun p _ ↦ Finset.sum_comm) Finset.sum_comm
+  · have hg : ∀ c q : ℕ, n.1 ≤ c + q →
+        (∑ d ∈ Finset.range (n.1 + 1), subword R x 0 c ⊗ₜ[R]
+          splice R x c (n.1 - c) q d (F (subword R x (c + q) d))) = 0 :=
+      fun c q h ↦ sum_tmul_splice_eq_zero R x (subword R x 0 c) _ h
+    refine Eq.trans ?_ (sum_range_triangle n.1 _ hg)
+    refine Finset.sum_congr rfl fun p _ ↦ ?_
+    rw [Finset.sum_comm]
+    refine Finset.sum_congr rfl fun c hc ↦ Finset.sum_congr rfl fun d _ ↦ ?_
+    simp only [Finset.mem_range] at hc
+    have hcp : c + (p - c) = p := by omega
+    rw [hcp]
+
+
+/-- The Taylor components of `coderiv F` are `F`: the only summand of the expansion that leaves a
+single letter is the one collapsing the whole word. -/
+@[simp]
+theorem letter_comp_coderiv (F : ReducedTensorWords R M →ₗ[R] M) :
+    letter R M ∘ₗ coderiv R F = F := by
+  refine linearMap_ext R M fun n x ↦ ?_
+  have hn : 0 < n.1 := n.2
+  simp only [LinearMap.coe_comp, Function.comp_apply]
+  rw [of_tprod_eq_subword R hn x,
+    coderiv_subword R F x (a := 0) (b := n.1) (K := n.1) (le_refl n.1), map_sum]
+  refine (Finset.sum_eq_single_of_mem 0 (Finset.mem_range.2 hn) ?_).trans ?_
+  · intro p _ hp
+    rw [map_sum]
+    exact Finset.sum_eq_zero fun d _ ↦ letter_splice_eq_zero R x _ (by omega)
+  · rw [map_sum]
+    refine (Finset.sum_eq_single_of_mem n.1 (Finset.mem_range.2 (by omega)) ?_).trans ?_
+    · exact fun d _ hd ↦ letter_splice_eq_zero R x _ (by omega)
+    · rw [letter_splice_self R x _ hn (by omega), Nat.zero_add]
+
+/-- The single-letter component of `coderiv F y` is `F y`. -/
+@[simp]
+theorem letter_coderiv_apply (F : ReducedTensorWords R M →ₗ[R] M) (y : ReducedTensorWords R M) :
+    letter R M (coderiv R F y) = F y :=
+  LinearMap.congr_fun (letter_comp_coderiv R F) y
+
+
+variable (M)
+
+/-- The submodule of coderivations of the reduced tensor coalgebra.  Membership in it is
+`TauCeti.ReducedTensorWords.mem_coderivations`. -/
+def coderivations : Submodule R (ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M) where
+  carrier := {b | IsCoderivation R b}
+  zero_mem' := by
+    simp only [Set.mem_ofPred_eq, IsCoderivation, LinearMap.comp_zero, LinearMap.rTensor_zero,
+      LinearMap.lTensor_zero, add_zero, LinearMap.zero_comp]
+  add_mem' := by
+    intro b₁ b₂ h₁ h₂
+    simp only [Set.mem_ofPred_eq, IsCoderivation, LinearMap.comp_add, LinearMap.rTensor_add,
+      LinearMap.lTensor_add] at h₁ h₂ ⊢
+    rw [h₁, h₂, ← LinearMap.add_comp]
+    exact congrArg (· ∘ₗ deconcatenation R M) (add_add_add_comm _ _ _ _)
+  smul_mem' := by
+    intro r b hb
+    simp only [Set.mem_ofPred_eq, IsCoderivation, LinearMap.comp_smul, LinearMap.rTensor_smul,
+      LinearMap.lTensor_smul] at hb ⊢
+    rw [hb, ← smul_add, LinearMap.smul_comp]
+
+@[simp]
+theorem mem_coderivations {b : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M} :
+    b ∈ coderivations R M ↔ IsCoderivation R b := Iff.rfl
+
+/-- Coderivations of the reduced tensor coalgebra are exactly their Taylor components: taking the
+letter of the value is a linear isomorphism onto the maps to single letters, with inverse the
+Taylor expansion `coderiv`.
+
+Its body is sealed; reason about it through
+`TauCeti.ReducedTensorWords.coderivEquivTaylor_apply` and
+`TauCeti.ReducedTensorWords.coderivEquivTaylor_symm_apply`. -/
+noncomputable def coderivEquivTaylor :
+    coderivations R M ≃ₗ[R] (ReducedTensorWords R M →ₗ[R] M) where
+  toFun b := letter R M ∘ₗ b.1
+  map_add' _ _ := LinearMap.comp_add _ _ _
+  map_smul' _ _ := LinearMap.comp_smul _ _ _
+  invFun F := ⟨coderiv R F, (mem_coderivations R M).2 (isCoderivation_coderiv R F)⟩
+  left_inv b := Subtype.ext <| (isCoderivation_coderiv R _).eq_of_letter_comp_eq
+    ((mem_coderivations R M).1 b.2) (letter_comp_coderiv R _)
+  right_inv F := letter_comp_coderiv R F
+
+@[simp]
+theorem coderivEquivTaylor_apply (b : coderivations R M) :
+    coderivEquivTaylor R M b = letter R M ∘ₗ b.1 := (rfl)
+
+@[simp]
+theorem coderivEquivTaylor_symm_apply (F : ReducedTensorWords R M →ₗ[R] M) :
+    (coderivEquivTaylor R M).symm F =
+      ⟨coderiv R F, (mem_coderivations R M).2 (isCoderivation_coderiv R F)⟩ := (rfl)
+
+end ReducedTensorWords
+
+end TauCeti
+
+namespace LinearMap
+
+open TauCeti TauCeti.ReducedTensorWords
+
+variable {R : Type uR} {M : Type uM} [CommSemiring R] [AddCommMonoid M] [Module R M]
+
+/-- The arity-`n` piece of the Taylor component `letter R M ∘ₗ b`: restrict to words of length
+`n`, apply the endomorphism, and retain its length-one component. -/
+noncomputable def taylorComponent
+    (b : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M) (n : {n : ℕ // 0 < n}) :
+    TensorPower R n.1 M →ₗ[R] M :=
+  (letter R M ∘ₗ b) ∘ₗ of R M n
+
+/-- Evaluation of a Taylor arity component is restriction to words of the specified length
+followed by projection to letters. -/
+@[simp]
+theorem taylorComponent_apply
+    (b : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M) (n : {n : ℕ // 0 < n})
+    (x : TensorPower R n.1 M) :
+    taylorComponent b n x = letter R M (b (of R M n x)) :=
+  (rfl)
+
+/-- Every arity component of the zero endomorphism is zero. -/
+@[simp]
+theorem taylorComponent_zero (n : {n : ℕ // 0 < n}) :
+    taylorComponent (0 : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M) n = 0 := by
+  rw [taylorComponent, LinearMap.comp_zero, LinearMap.zero_comp]
+
+/-- The arity components of `coderiv F` are the restrictions of `F` to each tensor length. -/
+@[simp]
+theorem taylorComponent_coderiv (F : ReducedTensorWords R M →ₗ[R] M)
+    (n : {n : ℕ // 0 < n}) :
+    taylorComponent (coderiv R F) n = F ∘ₗ of R M n := by
+  rw [taylorComponent, letter_comp_coderiv]
+
+/-- Taking an arity component preserves addition of endomorphisms. -/
+@[simp]
+theorem taylorComponent_add
+    (b₁ b₂ : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M)
+    (n : {n : ℕ // 0 < n}) :
+    taylorComponent (b₁ + b₂) n = taylorComponent b₁ n + taylorComponent b₂ n := by
+  simp only [taylorComponent, LinearMap.comp_add, LinearMap.add_comp]
+
+/-- Taking an arity component preserves scalar multiplication of endomorphisms. -/
+@[simp]
+theorem taylorComponent_smul (r : R)
+    (b : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M) (n : {n : ℕ // 0 < n}) :
+    taylorComponent (r • b) n = r • taylorComponent b n := by
+  simp only [taylorComponent, LinearMap.comp_smul, LinearMap.smul_comp]
+
+end LinearMap
+
+namespace TauCeti
+
+namespace ReducedTensorWords
+
+variable {R : Type uR} {M : Type uM} [CommSemiring R] [AddCommMonoid M] [Module R M]
+
+/-- A coderivation vanishes exactly when each of its aritywise Taylor components vanishes. -/
+theorem IsCoderivation.eq_zero_iff_taylorComponent_eq_zero
+    {b : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M} (hb : IsCoderivation R b) :
+    b = 0 ↔ ∀ n, b.taylorComponent n = 0 := by
+  constructor
+  · rintro rfl n
+    exact LinearMap.taylorComponent_zero n
+  · intro h
+    have hzero := (mem_coderivations R M).1 (coderivations R M).zero_mem
+    apply hb.eq_of_letter_comp_eq hzero
+    apply linearMap_ext R M
+    intro n x
+    have hn := LinearMap.congr_fun (h n) (PiTensorProduct.tprod R x)
+    simpa only [LinearMap.taylorComponent_apply, LinearMap.comp_apply, LinearMap.zero_apply,
+      map_zero]
+      using hn
+
+/-- A coderivation vanishes exactly when every arity component vanishes on pure tensors. -/
+theorem IsCoderivation.eq_zero_iff_taylorComponent_tprod_eq_zero
+    {b : ReducedTensorWords R M →ₗ[R] ReducedTensorWords R M} (hb : IsCoderivation R b) :
+    b = 0 ↔ ∀ n (x : Fin n.1 → M),
+      b.taylorComponent n (PiTensorProduct.tprod R x) = 0 := by
+  rw [hb.eq_zero_iff_taylorComponent_eq_zero]
+  constructor
+  · intro h n x
+    rw [h n, LinearMap.zero_apply]
+  · intro h n
+    refine PiTensorProduct.ext (MultilinearMap.ext fun x ↦ ?_)
+    simpa only [LinearMap.compMultilinearMap_apply, LinearMap.zero_apply] using h n x
+
+end ReducedTensorWords
+
+end TauCeti

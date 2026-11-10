@@ -1,0 +1,576 @@
+/-
+Copyright (c) 2026 The Tau Ceti contributors. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: The Tau Ceti contributors
+-/
+module
+
+public import TauCeti.LinearAlgebra.Graded.Insertion
+public import TauCeti.LinearAlgebra.TensorCoalgebra.Filtration
+public import TauCeti.LinearAlgebra.TensorCoalgebra.Primitives
+
+/-!
+# Collapsing a block of a tensor word to a single letter
+
+For an `R`-module `M`, `TauCeti.ReducedTensorWords.splice x a b p d e` is the tensor word obtained
+from the block `x a ⋯ x (a + b - 1)` by deleting its `d` letters at relative offset `p` and putting
+the single letter `e` in their place.  It is the shape of every summand of a coderivation of the
+reduced tensor coalgebra, whose Taylor expansion replaces one block of letters by the value of a
+single operation on that block.
+
+The main computation here is `TauCeti.ReducedTensorWords.deconcatenation_splice`: a cut of a spliced
+word falls either weakly to the left of the new letter, leaving a plain block on the left and a
+spliced word on the right, or strictly to its right, leaving a spliced word on the left and a plain
+block on the right.  No cut splits the new letter, a letter having no internal position.  Written
+this way both halves are again of the two shapes `subword` and `splice`, which is what makes the
+coderivation identity an equality of two sums over the same pairs of a cut position and a collapsed
+block.
+
+## Main definitions
+
+* `TauCeti.ReducedTensorWords.splice`: a block of a tensor word with one of its subblocks collapsed
+  to a single letter.
+
+## Main results
+
+* `TauCeti.ReducedTensorWords.splice_congr`: a spliced word depends only on the letters spliced.
+* `TauCeti.ReducedTensorWords.splice_smul`: a spliced word is linear in the letter spliced in.
+* `TauCeti.ReducedTensorWords.exists_splice_eq_of_tprod`: a letter outside the collapsed block
+  survives in the spliced word.
+* `TauCeti.ReducedTensorWords.splice_two_succ_eq_splice_two_pred`: deleting an interior letter by
+  collapsing it with either neighbour gives the same word.
+* `TauCeti.ReducedTensorWords.map_splice`: mapping a spliced word maps each of its letters.
+* `TauCeti.ReducedTensorWords.splice_two_eq_of_tprod_insertNth`: collapsing two consecutive
+  letters of a word.
+* `TauCeti.ReducedTensorWords.deconcatenation_splice`: reduced deconcatenation of a spliced word.
+* `TauCeti.ReducedTensorWords.prepend_splice`: prepending the first letter of a tuple commutes with
+  splicing a block of the rest.
+* `TauCeti.ReducedTensorWords.splice_mem_filtration`: a block of `b` letters with `d` of them
+  collapsed to one letter has length at most `b + 1 - d`.
+
+## References
+
+* E. Getzler and J. D. S. Jones, *A-infinity algebras and the cyclic bar complex*, Sections 1--2.
+* B. Keller, *Introduction to A-infinity algebras and modules*, Sections 3.1 and 3.6.
+-/
+
+public section
+
+open scoped BigOperators DirectSum TensorProduct
+
+universe uR uM uN
+
+namespace TauCeti
+
+namespace ReducedTensorWords
+
+variable (R : Type uR) {M : Type uM} [CommSemiring R] [AddCommMonoid M] [Module R M]
+
+/-- The block `x a ⊗ ⋯ ⊗ x (a + b - 1)` with its `d` letters at relative offset `p` replaced by the
+single letter `e`, a tensor word of length `b + 1 - d`.
+
+It is zero unless the collapsed block is nonempty and fits inside the block being spliced, which
+fits inside `x`; the intended range of the definition is `0 < d`, `p + d ≤ b` and `a + b ≤ n`. -/
+noncomputable def splice {n : ℕ} (x : Fin n → M) (a b p d : ℕ) (e : M) :
+    ReducedTensorWords R M :=
+  if h : 0 < d ∧ p + d ≤ b ∧ a + b ≤ n then
+    of R M ⟨b + 1 - d, by omega⟩
+      (PiTensorProduct.tprod R fun j : Fin (b + 1 - d) ↦
+        if _ : j.1 < p then x ⟨a + j.1, by omega⟩
+        else if _ : j.1 = p then e
+        else x ⟨a + (j.1 + d - 1), by omega⟩)
+  else 0
+
+/-- On its intended range, a spliced word is the pure tensor of its letters: the letters of the
+block before the collapsed subblock, then the new letter, then the letters after it. -/
+theorem splice_eq_of_tprod {n : ℕ} (x : Fin n → M) {a b p d : ℕ} (e : M) (hd : 0 < d)
+    (hpd : p + d ≤ b) (hab : a + b ≤ n) :
+    splice R x a b p d e =
+      of R M ⟨b + 1 - d, by omega⟩
+        (PiTensorProduct.tprod R fun j : Fin (b + 1 - d) ↦
+          if _ : j.1 < p then x ⟨a + j.1, by omega⟩
+          else if _ : j.1 = p then e
+          else x ⟨a + (j.1 + d - 1), by omega⟩) := by
+  rw [splice, dite_eq_left ⟨hd, hpd, hab⟩]
+
+/-- A spliced word of a natural-indexed string is the word of the string with the block
+replaced. -/
+theorem splice_eq_of_tprod_replaceBlock (x : ℕ → M) {n p d : ℕ} (hd : 0 < d) (hpd : p + d ≤ n)
+    (e : M) :
+    splice R (fun i : Fin n ↦ x i) 0 n p d e =
+      of R M ⟨p + 1 + (n - p - d), by omega⟩
+        (PiTensorProduct.tprod R fun j : Fin (p + 1 + (n - p - d)) ↦ replaceBlock x p d e j) := by
+  rw [splice_eq_of_tprod R _ e (a := 0) (b := n) hd hpd (by omega)]
+  refine of_tprod_congr R M _ (by omega) fun j ↦ ?_
+  rcases lt_trichotomy (j : ℕ) p with h | h | h
+  · simp [h]
+  · simp [h]
+  · simp [h, show ¬ (j : ℕ) < p by omega, show (j : ℕ) ≠ p by omega]
+
+/-- Collapsing an empty subblock is zero: a letter is never produced out of nothing. -/
+@[simp]
+theorem splice_zero_length {n : ℕ} (x : Fin n → M) (a b p : ℕ) (e : M) :
+    splice R x a b p 0 e = 0 := by
+  rw [splice, dite_eq_right (by omega)]
+
+/-- A collapsed subblock running past the end of the spliced block is zero: the length `b` of that
+block is smaller than the end `p + d` of the subblock. -/
+@[simp]
+theorem splice_eq_zero_of_block_lt_add {n : ℕ} (x : Fin n → M) {a b p d : ℕ} (e : M)
+    (hpd : b < p + d) :
+    splice R x a b p d e = 0 := by
+  rw [splice, dite_eq_right (by omega)]
+
+/-- A spliced block running past the end of the tuple is zero: the length `n` of the tuple is
+smaller than the end `a + b` of the block. -/
+@[simp]
+theorem splice_eq_zero_of_length_lt_add {n : ℕ} (x : Fin n → M) {a b p d : ℕ} (e : M)
+    (hab : n < a + b) :
+    splice R x a b p d e = 0 := by
+  rw [splice, dite_eq_right (by omega)]
+
+/-- A spliced word is zero outside the intended range of the definition. -/
+theorem splice_eq_zero {n : ℕ} (x : Fin n → M) {a b p d : ℕ} (e : M)
+    (h : ¬(0 < d ∧ p + d ≤ b ∧ a + b ≤ n)) : splice R x a b p d e = 0 := by
+  rw [splice, dite_eq_right h]
+
+/-- A spliced word vanishes when the collapsed block does not fit into the block being spliced
+into: either the collapsed block is empty, or it overruns that block. -/
+theorem splice_eq_zero_of_not_fits {n : ℕ} (x : Fin n → M) {a b p d : ℕ} (e : M)
+    (h : ¬(0 < d ∧ p + d ≤ b)) : splice R x a b p d e = 0 := by
+  rcases Nat.eq_zero_or_pos d with rfl | hd
+  · exact splice_zero_length R x a b p e
+  · exact splice_eq_zero_of_block_lt_add R x e (by omega)
+
+/-- A spliced word depends only on the letters of the block it splices, not on the tuple carrying
+them nor on the position of the block in it. -/
+theorem splice_congr {n m : ℕ} (x : Fin n → M) (y : Fin m → M) {a a' b p d : ℕ} (e : M)
+    (hab : a + b ≤ n) (hab' : a' + b ≤ m)
+    (h : ∀ (j : ℕ) (hj : j < b), x ⟨a + j, by omega⟩ = y ⟨a' + j, by omega⟩) :
+    splice R x a b p d e = splice R y a' b p d e := by
+  by_cases hd : 0 < d ∧ p + d ≤ b
+  · rw [splice_eq_of_tprod R x e hd.1 hd.2 hab, splice_eq_of_tprod R y e hd.1 hd.2 hab']
+    refine of_tprod_congr R M _ rfl fun j ↦ ?_
+    have hj := j.isLt
+    simp only [Fin.val_cast]
+    split_ifs with h₁ h₂
+    · exact h j.1 (by omega)
+    · rfl
+    · exact h (j.1 + d - 1) (by omega)
+  · rw [splice, splice, dite_eq_right (by tauto), dite_eq_right (by tauto)]
+
+/-- Splicing in the zero letter gives the zero word. -/
+@[simp]
+theorem splice_zero {n : ℕ} (x : Fin n → M) (a b p d : ℕ) : splice R x a b p d (0 : M) = 0 := by
+  by_cases h : 0 < d ∧ p + d ≤ b ∧ a + b ≤ n
+  · rw [splice_eq_of_tprod R x 0 h.1 h.2.1 h.2.2,
+      (PiTensorProduct.tprod R).map_coord_zero ⟨p, by simp only; omega⟩ (by simp), map_zero]
+  · exact splice_eq_zero R x 0 h
+
+/-- A spliced word is linear in the letter spliced in. -/
+theorem splice_smul {n : ℕ} (x : Fin n → M) (a b p d : ℕ) (c : R) (e : M) :
+    splice R x a b p d (c • e) = c • splice R x a b p d e := by
+  by_cases h : 0 < d ∧ p + d ≤ b ∧ a + b ≤ n
+  · rw [splice_eq_of_tprod R x _ h.1 h.2.1 h.2.2, splice_eq_of_tprod R x e h.1 h.2.1 h.2.2,
+      ← map_smul]
+    congr 1
+    -- The two tuples differ only in the spliced position.
+    set i : Fin (b + 1 - d) := ⟨p, by omega⟩
+    have hupd (y : M) : (fun j : Fin (b + 1 - d) ↦
+        if _ : j.1 < p then x ⟨a + j.1, by omega⟩ else if _ : j.1 = p then y
+        else x ⟨a + (j.1 + d - 1), by omega⟩) =
+        Function.update (fun j : Fin (b + 1 - d) ↦
+          if _ : j.1 < p then x ⟨a + j.1, by omega⟩ else if _ : j.1 = p then e
+          else x ⟨a + (j.1 + d - 1), by omega⟩) i y := by
+      funext j
+      by_cases hj : j = i
+      · subst hj
+        simp [i]
+      · have hjp : j.1 ≠ p := fun h ↦ hj (Fin.ext h)
+        simp [Function.update_of_ne hj, hjp]
+    rw [hupd (c • e), (PiTensorProduct.tprod R).map_update_smul, ← hupd e]
+  · rw [splice_eq_zero R x _ h, splice_eq_zero R x e h, smul_zero]
+
+/-- A letter outside the collapsed block survives in a spliced word: the spliced word is a pure
+tensor word one of whose letters is that letter. -/
+theorem exists_splice_eq_of_tprod {n : ℕ} (x : Fin n → M) {p d : ℕ} (hd : 0 < d)
+    (hpd : p + d ≤ n) (e : M) {i : Fin n} (hi : ¬(p ≤ i.1 ∧ i.1 < p + d)) :
+    ∃ y : Fin (n + 1 - d) → M, (∃ j, y j = x i) ∧
+      splice R x 0 n p d e = of R M ⟨n + 1 - d, by omega⟩ (PiTensorProduct.tprod R y) := by
+  have hin := i.isLt
+  refine ⟨_, ?_, splice_eq_of_tprod R x e hd hpd (by omega)⟩
+  by_cases hip : i.1 < p
+  · exact ⟨⟨i.1, by omega⟩, by simp [hip]⟩
+  · refine ⟨⟨i.1 + 1 - d, by omega⟩, ?_⟩
+    simp only [show ¬i.1 + 1 - d < p by omega, show i.1 + 1 - d ≠ p by omega, dite_false]
+    exact congrArg x (Fin.ext (by simp; omega))
+
+/-- Collapsing all letters but the first of a tuple leaves a two-letter word. -/
+theorem splice_collapse_tail_eq {n : ℕ} (hn : 0 < n) (x : Fin (n + 1) → M) (y : M) :
+    splice R x 0 (n + 1) 1 n y = of R M (2 : ℕ+) (PiTensorProduct.tprod R ![x 0, y]) := by
+  rw [splice_eq_of_tprod R x y (a := 0) (b := n + 1) (p := 1) hn (by omega) (by omega)]
+  exact of_tprod_congr R M _ (by omega : n + 1 + 1 - n = 2) fun i ↦ by
+    match i with
+    | ⟨0, _⟩ => simp
+    | ⟨1, _⟩ => simp
+    | ⟨k + 2, hk⟩ => exact absurd hk (by omega)
+
+/-- Collapsing all letters but the last of a tuple leaves a two-letter word. -/
+theorem splice_collapse_init_eq {n : ℕ} (hn : 0 < n) (x : Fin (n + 1) → M) (y : M) :
+    splice R x 0 (n + 1) 0 n y =
+      of R M (2 : ℕ+) (PiTensorProduct.tprod R ![y, x (Fin.last n)]) := by
+  rw [splice_eq_of_tprod R x y (a := 0) (b := n + 1) (p := 0) hn (by omega) (by omega)]
+  exact of_tprod_congr R M _ (by omega : n + 1 + 1 - n = 2) fun i ↦ by
+    match i with
+    | ⟨0, _⟩ => simp
+    | ⟨1, _⟩ => exact congrArg x (Fin.ext (by simp))
+    | ⟨k + 2, hk⟩ => exact absurd hk (by omega)
+
+/-- Collapsing the two letters at positions `p` and `p + 1` to the second deletes position `p`;
+for `p = 0` this leaves the last `n` letters. -/
+theorem splice_two_succ_eq_subword {n p : ℕ} (hn : 0 < n) (hp : p = 0)
+    (x : Fin (n + 1) → M) :
+    splice R x 0 (n + 1) p 2 (x ⟨p + 1, by omega⟩) = subword R x 1 n := by
+  subst hp
+  rw [splice_eq_of_tprod R x _ two_pos (by omega) (by omega),
+    subword_eq_of_tprod R x hn (by omega)]
+  refine of_tprod_congr R M _ (by omega) fun i ↦ ?_
+  simp only [not_lt_zero, dite_false, Fin.val_cast]
+  split_ifs <;> exact congrArg x (Fin.ext (by simp; omega))
+
+/-- Collapsing the two letters at positions `p` and `p + 1` to the first deletes position `p + 1`;
+for `p + 1 = n` this leaves the first `n` letters. -/
+theorem splice_two_pred_eq_subword {n p : ℕ} (hn : 0 < n) (hp : p + 1 = n)
+    (x : Fin (n + 1) → M) :
+    splice R x 0 (n + 1) p 2 (x ⟨p, by omega⟩) = subword R x 0 n := by
+  rw [splice_eq_of_tprod R x _ two_pos (by omega) (by omega),
+    subword_eq_of_tprod R x hn (by omega)]
+  refine of_tprod_congr R M _ (by omega) fun i ↦ ?_
+  simp only [Fin.val_cast]
+  split_ifs <;> first
+    | omega
+    | exact congrArg x rfl
+    | exact congrArg x (Fin.ext (by dsimp only; omega))
+
+/-- Deleting the letter at an interior position `p` by collapsing it with its right neighbour or
+with its left neighbour gives the same word. -/
+theorem splice_two_succ_eq_splice_two_pred {n p : ℕ} (hp₀ : 0 < p) (hpn : p < n)
+    (x : Fin (n + 1) → M) :
+    splice R x 0 (n + 1) p 2 (x ⟨p + 1, by omega⟩) =
+      splice R x 0 (n + 1) (p - 1) 2 (x ⟨p - 1, by omega⟩) := by
+  rw [splice_eq_of_tprod R x _ two_pos (by omega) (by omega),
+    splice_eq_of_tprod R x _ two_pos (by omega) (by omega)]
+  refine of_tprod_congr R M _ rfl fun i ↦ ?_
+  simp only [Fin.val_cast]
+  split_ifs <;> first
+    | omega
+    | exact congrArg x rfl
+    | exact congrArg x (Fin.ext (by dsimp only; omega))
+
+/-- Collapsing the two letters at positions `p` and `p + 1` of a word of length `n + 2` into `e`
+gives the pure tensor of the remaining `n` letters with `e` inserted at position `p`. -/
+theorem splice_two_eq_of_tprod_insertNth {n : ℕ} (x : Fin (n + 2) → M) (p : Fin (n + 1)) (e : M) :
+    splice R x 0 (n + 2) p 2 e =
+      of R M ⟨n + 1, by omega⟩ (PiTensorProduct.tprod R
+        (Fin.insertNth p e fun i ↦ x (p.castSucc.succAbove (p.succAbove i)))) := by
+  rw [splice_eq_of_tprod R x e (a := 0) (b := n + 2) two_pos (by omega) (by omega)]
+  refine of_tprod_congr R M _ (by omega) fun ⟨j, hj⟩ ↦ ?_
+  rcases lt_trichotomy j p with h | rfl | h
+  · -- Before the collapsed block, the letters are those of `x`.
+    have h₁ : p.succAbove ⟨j, by omega⟩ = Fin.castSucc ⟨j, by omega⟩ :=
+      Fin.succAbove_of_castSucc_lt _ _ (Fin.lt_def.2 h)
+    have h₂ : p.castSucc.succAbove (Fin.castSucc ⟨j, by omega⟩) = ⟨0 + j, by omega⟩ := by
+      rw [Fin.succAbove_of_castSucc_lt _ _ (Fin.lt_def.2 (by simpa using h))]
+      exact Fin.ext (by simp)
+    rw [show (Fin.cast (by omega) ⟨j, hj⟩ : Fin (n + 1)) = p.succAbove ⟨j, by omega⟩ from
+      Fin.ext (by simp [h₁]), Fin.insertNth_apply_succAbove, h₁, h₂]
+    simp only [h, dite_true]
+  · simp only [lt_irrefl, dite_false, dite_true]
+    rw [show (Fin.cast (by omega) ⟨(p : ℕ), hj⟩ : Fin (n + 1)) = p from Fin.ext (by simp),
+      Fin.insertNth_apply_same]
+  · -- After the collapsed block, the letters are those of `x`, shifted by one.
+    obtain ⟨j, rfl⟩ : ∃ i, j = i + 1 := ⟨j - 1, by omega⟩
+    have h₁ : p.succAbove ⟨j, by omega⟩ = Fin.succ ⟨j, by omega⟩ :=
+      Fin.succAbove_of_le_castSucc _ _ (Fin.le_def.2 (by simp; omega))
+    have h₂ : p.castSucc.succAbove (Fin.succ ⟨j, by omega⟩) = ⟨0 + (j + 1 + 2 - 1), by omega⟩ := by
+      rw [Fin.succAbove_of_le_castSucc _ _ (Fin.le_def.2 (by simp; omega))]
+      exact Fin.ext (by simp)
+    rw [show (Fin.cast (by omega) ⟨j + 1, hj⟩ : Fin (n + 1)) = p.succAbove ⟨j, by omega⟩ from
+      Fin.ext (by simp [h₁]), Fin.insertNth_apply_succAbove, h₁, h₂]
+    simp only [show ¬ j + 1 < (p : ℕ) by omega, show j + 1 ≠ (p : ℕ) by omega, dite_false]
+
+/-- Splicing in the negative of a letter negates the spliced word. -/
+@[simp]
+theorem splice_neg (R : Type uR) {M : Type uM} [CommRing R] [AddCommGroup M] [Module R M]
+    {n : ℕ} (x : Fin n → M) (a b p d : ℕ) (e : M) :
+    splice R x a b p d (-e) = -splice R x a b p d e := by
+  rw [← neg_one_smul R e, splice_smul]
+  exact neg_one_smul R (splice R x a b p d e)
+
+/-- Mapping a spliced tensor word applies the map to the untouched letters and the replacement
+letter. -/
+theorem map_splice {N : Type uN} [AddCommMonoid N] [Module R N] (f : M →ₗ[R] N)
+    {n : ℕ} (x : Fin n → M) (a b p d : ℕ) (e : M) :
+    ReducedTensorWords.map (R := R) f (splice R x a b p d e) =
+      splice R (fun i ↦ f (x i)) a b p d (f e) := by
+  by_cases h : 0 < d ∧ p + d ≤ b ∧ a + b ≤ n
+  · rw [splice_eq_of_tprod R x e h.1 h.2.1 h.2.2,
+      splice_eq_of_tprod R (fun i ↦ f (x i)) (f e) h.1 h.2.1 h.2.2,
+      map_of_tprod]
+    congr 2
+    funext i
+    split_ifs <;> rfl
+  · rw [splice_eq_zero R x e h,
+      splice_eq_zero R (fun i ↦ f (x i)) (f e) h, map_zero]
+
+
+/-- Reduced deconcatenation of a pure tensor word, cut at every nontrivial position. -/
+private theorem deconcatenation_of_tprod {L : ℕ} (hL : 0 < L) (y : Fin L → M) :
+    deconcatenation R M (of R M ⟨L, hL⟩ (PiTensorProduct.tprod R y)) =
+      ∑ c ∈ Finset.Ioo 0 L, subword R y 0 c ⊗ₜ[R] subword R y c (L - c) := by
+  rw [of_tprod_eq_subword R hL y, deconcatenation_subword R y (a := 0) (b := L)]
+  exact Finset.sum_congr rfl fun c _ ↦ by rw [Nat.zero_add]
+
+/-- Cutting a spliced word weakly to the left of the new letter leaves a shorter block on the left
+and a spliced word on the right. -/
+private theorem deconcatenation_splice_left {n : ℕ} (x : Fin n → M) {a b p d c : ℕ} (e : M)
+    (hd : 0 < d) (hpd : p + d ≤ b) (hab : a + b ≤ n) (hc : 0 < c) (hcp : c ≤ p) :
+    subword R
+        (fun j : Fin (b + 1 - d) ↦
+          if _ : j.1 < p then x ⟨a + j.1, by omega⟩
+          else if _ : j.1 = p then e
+          else x ⟨a + (j.1 + d - 1), by omega⟩) 0 c ⊗ₜ[R]
+      subword R
+        (fun j : Fin (b + 1 - d) ↦
+          if _ : j.1 < p then x ⟨a + j.1, by omega⟩
+          else if _ : j.1 = p then e
+          else x ⟨a + (j.1 + d - 1), by omega⟩) c (b + 1 - d - c) =
+      subword R x a c ⊗ₜ[R] splice R x (a + c) (b - c) (p - c) d e := by
+  have hfst : subword R
+      (fun j : Fin (b + 1 - d) ↦
+        if _ : j.1 < p then x ⟨a + j.1, by omega⟩
+        else if _ : j.1 = p then e
+        else x ⟨a + (j.1 + d - 1), by omega⟩) 0 c = subword R x a c := by
+    rw [subword_eq_of_tprod R _ hc (by omega), subword_eq_of_tprod R x hc (by omega)]
+    refine of_tprod_congr R M _ rfl fun j ↦ ?_
+    have hj := j.isLt
+    simp only [Fin.val_cast]
+    have hjp : 0 + j.1 < p := by omega
+    rw [dite_eq_left hjp]
+    exact congrArg x (by simp only [Fin.mk.injEq]; omega)
+  have hsnd : subword R
+      (fun j : Fin (b + 1 - d) ↦
+        if _ : j.1 < p then x ⟨a + j.1, by omega⟩
+        else if _ : j.1 = p then e
+        else x ⟨a + (j.1 + d - 1), by omega⟩) c (b + 1 - d - c) =
+      splice R x (a + c) (b - c) (p - c) d e := by
+    rw [subword_eq_of_tprod R _ (by omega) (by omega),
+      splice_eq_of_tprod R x e hd (by omega) (by omega)]
+    refine of_tprod_congr R M _ (by omega) fun j ↦ ?_
+    simp only [Fin.val_cast]
+    split_ifs <;> first | rfl | exact congrArg x (by simp only [Fin.mk.injEq]; omega) | omega
+  rw [hfst, hsnd]
+
+/-- Cutting a spliced word strictly to the right of the new letter leaves a spliced word on the
+left and a shorter block on the right. -/
+private theorem deconcatenation_splice_right {n : ℕ} (x : Fin n → M) {a b p d c : ℕ} (e : M)
+    (hd : 0 < d) (hpd : p + d ≤ b) (hab : a + b ≤ n) (hpc : p < c) (hc : c < b + 1 - d) :
+    subword R
+        (fun j : Fin (b + 1 - d) ↦
+          if _ : j.1 < p then x ⟨a + j.1, by omega⟩
+          else if _ : j.1 = p then e
+          else x ⟨a + (j.1 + d - 1), by omega⟩) 0 c ⊗ₜ[R]
+      subword R
+        (fun j : Fin (b + 1 - d) ↦
+          if _ : j.1 < p then x ⟨a + j.1, by omega⟩
+          else if _ : j.1 = p then e
+          else x ⟨a + (j.1 + d - 1), by omega⟩) c (b + 1 - d - c) =
+      splice R x a (c + (d - 1)) p d e ⊗ₜ[R]
+        subword R x (a + (c + (d - 1))) (b - (c + (d - 1))) := by
+  have hfst : subword R
+      (fun j : Fin (b + 1 - d) ↦
+        if _ : j.1 < p then x ⟨a + j.1, by omega⟩
+        else if _ : j.1 = p then e
+        else x ⟨a + (j.1 + d - 1), by omega⟩) 0 c = splice R x a (c + (d - 1)) p d e := by
+    rw [subword_eq_of_tprod R _ (by omega) (by omega),
+      splice_eq_of_tprod R x e hd (by omega) (by omega)]
+    refine of_tprod_congr R M _ (by omega) fun j ↦ ?_
+    simp only [Fin.val_cast]
+    split_ifs <;> first | rfl | exact congrArg x (by simp only [Fin.mk.injEq]; omega) | omega
+  have hsnd : subword R
+      (fun j : Fin (b + 1 - d) ↦
+        if _ : j.1 < p then x ⟨a + j.1, by omega⟩
+        else if _ : j.1 = p then e
+        else x ⟨a + (j.1 + d - 1), by omega⟩) c (b + 1 - d - c) =
+      subword R x (a + (c + (d - 1))) (b - (c + (d - 1))) := by
+    rw [subword_eq_of_tprod R _ (by omega) (by omega),
+      subword_eq_of_tprod R x (by omega) (by omega)]
+    refine of_tprod_congr R M _ (by omega) fun j ↦ ?_
+    simp only [Fin.val_cast]
+    have hjp : ¬(c + j.1) < p := by omega
+    have hjp_ne : ¬(c + j.1) = p := by omega
+    rw [dite_eq_right hjp, dite_eq_right hjp_ne]
+    exact congrArg x (by simp only [Fin.mk.injEq]; omega)
+  rw [hfst, hsnd]
+
+/-- Reduced deconcatenation of a spliced word, when the collapsed block really is a nonempty
+block of the spliced block. -/
+private theorem deconcatenation_splice_of_le {n : ℕ} (x : Fin n → M) {a b p d : ℕ} (e : M)
+    (hd : 0 < d) (hpd : p + d ≤ b) (hab : a + b ≤ n) :
+    deconcatenation R M (splice R x a b p d e) =
+      (∑ c ∈ Finset.range (p + 1), subword R x a c ⊗ₜ[R] splice R x (a + c) (b - c) (p - c) d e) +
+        ∑ c ∈ Finset.range b, splice R x a c p d e ⊗ₜ[R] subword R x (a + c) (b - c) := by
+  rw [splice_eq_of_tprod R x e hd hpd hab, deconcatenation_of_tprod R (by omega)]
+  have hIoo : Finset.Ioo 0 (b + 1 - d) =
+      Finset.Ico 1 (p + 1) ∪ Finset.Ico (p + 1) (b + 1 - d) := by
+    rw [Finset.Ico_union_Ico_eq_Ico (by omega) (by omega)]
+    ext c
+    simp only [Finset.mem_Ioo, Finset.mem_Ico]
+    omega
+  rw [hIoo, Finset.sum_union (Finset.Ico_disjoint_Ico_consecutive 1 (p + 1) (b + 1 - d))]
+  congr 1
+  · have hzero : ∀ c ∈ Finset.Ico 0 (p + 1), c ∉ Finset.Ico 1 (p + 1) →
+        subword R x a c ⊗ₜ[R] splice R x (a + c) (b - c) (p - c) d e = 0 := by
+      intro c hc hc'
+      have hc0 : c = 0 := by
+        by_contra hne
+        exact hc' (Finset.mem_Ico.2 ⟨by omega, (Finset.mem_Ico.1 hc).2⟩)
+      rw [hc0, subword_length_zero, TensorProduct.zero_tmul]
+    rw [Finset.range_eq_Ico,
+      ← Finset.sum_subset (Finset.Ico_subset_Ico_left (Nat.zero_le 1)) hzero]
+    refine Finset.sum_congr rfl fun c hc ↦ ?_
+    simp only [Finset.mem_Ico] at hc
+    exact deconcatenation_splice_left R x e hd hpd hab (by omega) (by omega)
+  · have hzero : ∀ c ∈ Finset.Ico 0 b, c ∉ Finset.Ico (p + d) b →
+        splice R x a c p d e ⊗ₜ[R] subword R x (a + c) (b - c) = 0 := by
+      intro c hc hc'
+      have hlt : c < p + d := by
+        by_contra hge
+        exact hc' (Finset.mem_Ico.2 ⟨by omega, (Finset.mem_Ico.1 hc).2⟩)
+      rw [splice_eq_zero_of_block_lt_add R x e hlt, TensorProduct.zero_tmul]
+    have hIco :
+        Finset.Ico (p + d) b = Finset.Ico (p + 1 + (d - 1)) (b + 1 - d + (d - 1)) := by
+      congr 1 <;> omega
+    rw [Finset.range_eq_Ico,
+      ← Finset.sum_subset (Finset.Ico_subset_Ico (Nat.zero_le (p + d)) (le_refl b)) hzero,
+      hIco,
+      ← Finset.sum_Ico_add'
+        (fun c ↦ splice R x a c p d e ⊗ₜ[R] subword R x (a + c) (b - c)) (p + 1) (b + 1 - d)
+        (d - 1)]
+    refine Finset.sum_congr rfl fun c hc ↦ ?_
+    simp only [Finset.mem_Ico] at hc
+    exact deconcatenation_splice_right R x e hd hpd hab (by omega) (by omega)
+
+/-- Reduced deconcatenation of a spliced word.  A cut never splits the new letter, so it falls
+either weakly to its left, leaving a plain block and a spliced word, or strictly to its right,
+leaving a spliced word and a plain block.  Both sums range over the cut position measured in the
+original block, and their summands vanish outside the positions that really occur; that is what
+makes the identity hold for a degenerate collapsed block too, both sides then being zero. -/
+theorem deconcatenation_splice {n : ℕ} (x : Fin n → M) {a b p d : ℕ} (e : M) :
+    deconcatenation R M (splice R x a b p d e) =
+      (∑ c ∈ Finset.range (p + 1), subword R x a c ⊗ₜ[R] splice R x (a + c) (b - c) (p - c) d e) +
+        ∑ c ∈ Finset.range b, splice R x a c p d e ⊗ₜ[R] subword R x (a + c) (b - c) := by
+  by_cases hab : a + b ≤ n
+  · by_cases h : 0 < d ∧ p + d ≤ b
+    · exact deconcatenation_splice_of_le R x e h.1 h.2 hab
+    · rw [splice, dite_eq_right (by tauto), map_zero]
+      rw [Finset.sum_eq_zero fun c hc ↦ ?_, Finset.sum_eq_zero fun c hc ↦ ?_, add_zero]
+      · simp only [Finset.mem_range] at hc
+        rcases Nat.eq_zero_or_pos d with rfl | hd
+        · rw [splice_zero_length, TensorProduct.zero_tmul]
+        · rw [splice_eq_zero_of_block_lt_add R x e (by omega), TensorProduct.zero_tmul]
+      · simp only [Finset.mem_range] at hc
+        rcases Nat.eq_zero_or_pos d with rfl | hd
+        · rw [splice_zero_length, TensorProduct.tmul_zero]
+        · rw [splice_eq_zero_of_block_lt_add R x e (by omega), TensorProduct.tmul_zero]
+  · rw [splice_eq_zero_of_length_lt_add R x e (by omega), map_zero]
+    have hleft :
+        ∑ c ∈ Finset.range (p + 1),
+          subword R x a c ⊗ₜ[R] splice R x (a + c) (b - c) (p - c) d e = 0 :=
+      Finset.sum_eq_zero fun c hc ↦ by
+        simp only [Finset.mem_range] at hc
+        by_cases hcb : c ≤ b
+        · rw [splice_eq_zero_of_length_lt_add R x e (by omega), TensorProduct.tmul_zero]
+        · rw [subword_eq_zero_of_lt_add R x (by omega), TensorProduct.zero_tmul]
+    have hright : ∑ c ∈ Finset.range b,
+        splice R x a c p d e ⊗ₜ[R] subword R x (a + c) (b - c) = 0 :=
+      Finset.sum_eq_zero fun c hc ↦ by
+        simp only [Finset.mem_range] at hc
+        rw [subword_eq_zero_of_lt_add R x (by omega), TensorProduct.tmul_zero]
+    rw [hleft, hright, add_zero]
+
+/-- Prepending the first letter of a tuple to a splice of the remaining letters is the splice of
+the whole tuple at the next position. -/
+theorem prepend_splice {n : ℕ} (y : Fin (n + 1) → M) (p d : ℕ) (e : M) :
+    prepend R M (y 0) (splice R (Fin.tail y) 0 n p d e) = splice R y 0 (n + 1) (p + 1) d e := by
+  by_cases h : 0 < d ∧ p + d ≤ n
+  · rw [splice_eq_of_tprod R (Fin.tail y) e h.1 h.2 (by omega), prepend_of_tprod,
+      splice_eq_of_tprod R y e h.1 (by omega) (by omega)]
+    refine of_tprod_congr R M _ (by dsimp only; omega) fun i ↦ ?_
+    induction i using Fin.cases with
+    | zero => simp
+    | succ j =>
+      simp only [Fin.cons_succ, Fin.tail, Fin.val_cast, Fin.val_succ, Nat.zero_add]
+      split_ifs <;> first | omega | rfl | exact congrArg y (Fin.ext (by simp; omega))
+  · rw [splice_eq_zero_of_not_fits R _ e h, map_zero,
+      splice_eq_zero_of_not_fits R y e (by omega)]
+
+/-- Off the triangle `c + p < n`, every right-half term of the co-Leibniz rule vanishes: an empty
+collapse is zero outright, and an overrunning collapse vanishes because the cut half is shorter
+than the end of the collapsed block. -/
+theorem sum_tmul_splice_eq_zero {N : Type*} [AddCommMonoid N] [Module R N]
+    {n : ℕ} (x : Fin n → M) {c p : ℕ}
+    (u : N) (e : ℕ → M) (hp : n ≤ c + p) :
+    ∑ d ∈ Finset.range (n + 1), u ⊗ₜ[R] splice R x c (n - c) p d (e d) = 0 := by
+  refine Finset.sum_eq_zero fun d _ ↦ ?_
+  rw [splice_eq_zero_of_not_fits R x _ (by omega), TensorProduct.tmul_zero]
+
+/-- The letter of a spliced word vanishes unless the collapse starts at the beginning of the
+block and replaces all of it. A fitting collapse otherwise leaves at least two letters, and
+an invalid splice is zero. -/
+theorem letter_splice_eq_zero {n : ℕ} (x : Fin n → M) {a b p d : ℕ} (e : M)
+    (hnot : ¬(p = 0 ∧ d = b)) :
+    letter R M (splice R x a b p d e) = 0 := by
+  by_cases h : 0 < d ∧ p + d ≤ b ∧ a + b ≤ n
+  · rw [letter_apply, splice_eq_of_tprod R x e h.1 h.2.1 h.2.2,
+      component_of_of_ne R M
+        (by simp only [ne_eq, Subtype.ext_iff, Positive.val_one]; omega), map_zero]
+  · rw [splice_eq_zero R x e h, map_zero]
+
+/-- Collapsing a whole block leaves the single new letter. -/
+theorem letter_splice_self {n : ℕ} (x : Fin n → M) {a b : ℕ} (e : M) (hb : 0 < b)
+    (hab : a + b ≤ n) : letter R M (splice R x a b 0 b e) = e := by
+  rw [letter_apply, splice_eq_of_tprod R x e hb (by omega) hab,
+    component_of_eq R M (m := ⟨b + 1 - b, by omega⟩) (n := 1)
+      (Subtype.ext (by simp only [Positive.val_one]; omega)),
+    TensorPower.cast_tprod, TauCeti.TensorPower.oneEquiv_tprod]
+  simp only [Function.comp_apply]
+  rw [dite_eq_right (by simp), dite_eq_left (by simp)]
+
+/-! ### Tensor-length bounds -/
+
+/-- A block of `b` letters with a subblock of `d` letters collapsed to one letter has length at most
+`b + 1 - d`. -/
+theorem splice_mem_filtration {n : ℕ} (x : Fin n → M) (a b p d : ℕ) (e : M) :
+    splice R x a b p d e ∈ filtration R M (b + 1 - d) := by
+  by_cases h : 0 < d ∧ p + d ≤ b ∧ a + b ≤ n
+  · rw [splice_eq_of_tprod R x e h.1 h.2.1 h.2.2]
+    exact of_mem_filtration R M (k := ⟨b + 1 - d, by omega⟩) le_rfl _
+  · rw [splice_eq_zero R x e h]
+    exact zero_mem _
+
+/-- A summand of a Taylor expansion of a word of length at most `n + j`, by a map `F` vanishing on
+the words of length at most `j`, has length at most `n`: either its collapsed block has at most `j`
+letters and `F` kills it, or it collapses more than `j` letters to one. -/
+theorem splice_apply_subword_mem_filtration (F : ReducedTensorWords R M →ₗ[R] M) {j n : ℕ}
+    (hF : ∀ z ∈ filtration R M j, F z = 0) {m : ℕ} (y : Fin m → M) {b : ℕ} (hb : b ≤ n + j)
+    {l : ℕ} (x : Fin l → M) (a c p d : ℕ) :
+    splice R y a b p d (F (subword R x c d)) ∈ filtration R M n := by
+  by_cases hdj : d ≤ j
+  · rw [hF _ (subword_mem_filtration R M x c hdj), splice_zero]
+    exact zero_mem _
+  · exact filtration_monotone R M (by omega) (splice_mem_filtration R y a b p d _)
+
+end ReducedTensorWords
+
+end TauCeti

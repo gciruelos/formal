@@ -960,8 +960,175 @@ the trivial tree is, vacuously). -/
 def Tree.IsRecursivelyRegular (τ : Tree) : Prop :=
   ∀ v (hv : v ∈ τ.carrier), τ.IsInternal v → (τ.induced v hv).IsRegular
 
+theorem flip_leaves_eq {τ σ : Tree} (v : Word) (hσ : Tree.flip v τ = σ) {w : Word}
+    (hfl : Tree.flipWord v w ∈ (Tree.flip v τ).leaves) : Tree.flipWord v w ∈ σ.leaves := by
+  cases hσ
+  exact hfl
+
+theorem flipWord_mem_leaves (v : Word) {τ : Tree} {w : Word} (hw : w ∈ τ.leaves) :
+    Tree.flipWord v w ∈ (Tree.flip v τ).leaves := by
+  simp only [Tree.leaves, Finset.mem_filter] at hw ⊢
+  obtain ⟨hw_c, hw_l⟩ := hw
+  refine ⟨Finset.mem_image.mpr ⟨w, hw_c, rfl⟩, ?_⟩
+  intro h_false
+  obtain ⟨u, hu, heq⟩ := Finset.mem_image.mp h_false
+  have heq' := congrArg (Tree.flipWord v) heq
+  rw [Tree.flipWord_involutive] at heq'
+  obtain ⟨c, hc⟩ := Tree.flipWord_cons v (Tree.flipWord v w) false
+  rw [Tree.flipWord_involutive] at hc
+  have hu_eq : u = c :: w := by
+    rw [heq', hc]
+  have hc_in : (c :: w) ∈ τ.carrier := hu_eq ▸ hu
+  cases c with
+  | false => exact hw_l hc_in
+  | true =>
+    have h_false_in : (false :: w) ∈ τ.carrier := by
+      have hf := τ.full w
+      tauto
+    exact hw_l h_false_in
+
+/-- Map on leaves induced by a flip arrow. -/
+def FlipArrow.mapLeaf {τ σ : Tree} (a : FlipArrow τ σ) (x : {w : Word // w ∈ τ.leaves}) :
+    {w : Word // w ∈ σ.leaves} :=
+  ⟨Tree.flipWord a.v x.1, flip_leaves_eq a.v a.eq (flipWord_mem_leaves a.v x.2)⟩
+
+/-- The prefunctor from `TreeQuiver` to `Type` sending each tree to its leaf subtype. -/
+def treeQuiverPrefunctor : TreeQuiver ⥤q Type where
+  obj τ := {w : Word // w ∈ τ.leaves}
+  map a := TypeCat.ofHom (FlipArrow.mapLeaf a)
+
+/-- The functor from paths of `TreeQuiver` to `Type`. -/
+def pathsFunctor : Paths TreeQuiver ⥤ Type := Paths.lift treeQuiverPrefunctor
+
+private theorem suffix_disjoint (u : Word) {v₁ v₂ : Word}
+    (h1 : [false] <:+ v₁) (h2 : [true] <:+ v₂) :
+    ¬ (v₁ <:+ u ∧ v₂ <:+ u) := by
+  rintro ⟨s1, s2⟩
+  have hf : [false] <:+ u := h1.trans s1
+  have ht : [true] <:+ u := h2.trans s2
+  obtain ⟨u1, rfl⟩ := hf
+  obtain ⟨u2, hu2⟩ := ht
+  have h_last : (u1 ++ [false]).reverse.head? = (u2 ++ [true]).reverse.head? := by
+    rw [hu2]
+  simp only [List.reverse_append, List.reverse_singleton] at h_last
+  simp only [List.cons_append, List.nil_append, List.head?_cons] at h_last
+  contradiction
+
+private theorem flipWord_commute (v₁ v₂ : Word) (h1 : Tree.Descends [false] v₁) (h2 : Tree.Descends [true] v₂) (u : Word) :
+    Tree.flipWord v₂ (Tree.flipWord v₁ u) = Tree.flipWord v₁ (Tree.flipWord v₂ u) := by
+  have hd : ¬ (v₁ <:+ u ∧ v₂ <:+ u) := suffix_disjoint u h1 h2
+  by_cases h_v1 : v₁ <:+ u
+  · have h_v2 : ¬ (v₂ <:+ u) := fun h => hd ⟨h_v1, h⟩
+    obtain ⟨z, rfl⟩ := h_v1
+    rw [Tree.flipWord_append]
+    have hsuf1 : v₁ <:+ (Tree.tilde z ++ v₁) := List.suffix_append _ _
+    have h_not2 : ¬ (v₂ <:+ Tree.tilde z ++ v₁) := fun h => suffix_disjoint (Tree.tilde z ++ v₁) h1 h2 ⟨hsuf1, h⟩
+    have h_fl2 : Tree.flipWord v₂ (Tree.tilde z ++ v₁) = Tree.tilde z ++ v₁ := by
+      simp [Tree.flipWord, h_not2]
+    rw [h_fl2]
+    have h_fl2' : Tree.flipWord v₂ (z ++ v₁) = z ++ v₁ := by
+      simp [Tree.flipWord, h_v2]
+    rw [h_fl2', Tree.flipWord_append]
+  · by_cases h_v2 : v₂ <:+ u
+    · obtain ⟨z, rfl⟩ := h_v2
+      rw [Tree.flipWord_append]
+      have hsuf2 : v₂ <:+ (Tree.tilde z ++ v₂) := List.suffix_append _ _
+      have h_not1 : ¬ (v₁ <:+ Tree.tilde z ++ v₂) := fun h => suffix_disjoint (Tree.tilde z ++ v₂) h1 h2 ⟨h, hsuf2⟩
+      have h_fl1 : Tree.flipWord v₁ (Tree.tilde z ++ v₂) = Tree.tilde z ++ v₂ := by
+        simp [Tree.flipWord, h_not1]
+      rw [h_fl1]
+      have h_fl1' : Tree.flipWord v₁ (z ++ v₂) = z ++ v₂ := by
+        simp [Tree.flipWord, h_v1]
+      rw [h_fl1', Tree.flipWord_append]
+    · have h_fl1 : Tree.flipWord v₁ u = u := by
+        simp [Tree.flipWord, h_v1]
+      have h_fl2 : Tree.flipWord v₂ u = u := by
+        simp [Tree.flipWord, h_v2]
+      rw [h_fl1, h_fl2, h_fl1]
+
+private theorem tilde_append (z w : Word) (hw : w ≠ []) :
+    Tree.tilde (z ++ w) = z ++ Tree.tilde w := by
+  induction w using List.reverseRecOn with
+  | nil => contradiction
+  | append_singleton xs b =>
+    rw [← List.append_assoc]
+    rw [Tree.tilde_append_singleton, Tree.tilde_append_singleton]
+    rw [List.append_assoc]
+
+private theorem suffix_tilde_of_suffix (v u : Word) (hv : v ≠ []) (h : v <:+ u) :
+    Tree.tilde v <:+ Tree.tilde u := by
+  obtain ⟨z, rfl⟩ := h
+  rw [tilde_append z v hv]
+  exact List.suffix_append z (Tree.tilde v)
+
+private theorem suffix_tilde_iff (v u : Word) (hv : v ≠ []) :
+    Tree.tilde v <:+ Tree.tilde u ↔ v <:+ u := by
+  constructor
+  · intro h
+    have h2 := suffix_tilde_of_suffix (Tree.tilde v) (Tree.tilde u) (by
+      intro h_nil
+      have := congrArg Tree.tilde h_nil
+      simp only [Tree.tilde_involutive] at this
+      exact hv this) h
+    simpa using h2
+  · exact suffix_tilde_of_suffix v u hv
+
+private theorem flipWord_nil (u : Word) : Tree.flipWord [] u = Tree.tilde u := by
+  have : ([] : Word) <:+ u := by simp
+  have h := Tree.flipWord_append [] u
+  simpa using h
+
+private theorem flipWord_root (v : Word) (hv : v ≠ []) (u : Word) :
+    Tree.flipWord (Tree.tilde v) (Tree.flipWord [] u) = Tree.flipWord [] (Tree.flipWord v u) := by
+  rw [flipWord_nil, flipWord_nil]
+  by_cases hvu : v <:+ u
+  · obtain ⟨z, rfl⟩ := hvu
+    rw [Tree.flipWord_append]
+    rw [tilde_append z v hv]
+    rw [Tree.flipWord_append]
+    rw [tilde_append (Tree.tilde z) v hv]
+  · have h_not : ¬ (Tree.tilde v <:+ Tree.tilde u) := by
+      rwa [suffix_tilde_iff v u hv]
+    have h_fl1 : Tree.flipWord v u = u := by
+      simp [Tree.flipWord, hvu]
+    have h_fl2 : Tree.flipWord (Tree.tilde v) (Tree.tilde u) = Tree.tilde u := by
+      simp [Tree.flipWord, h_not]
+    rw [h_fl1, h_fl2]
+
 /-- The functor `leaves : Trees → Set`, `leaves(v,τ) = flip_v |_{leaves τ}`. -/
-def Trees.leaves : Trees ⥤ Type := sorry
+def Trees.leaves : Trees ⥤ Type :=
+  CategoryTheory.Quotient.lift treesRel pathsFunctor (by
+    intro x y f₁ f₂ h
+    cases h with
+    | inv a b hab =>
+      rw [Functor.map_comp]
+      erw [Paths.lift_toPath, Paths.lift_toPath]
+      ext ⟨w, hw⟩
+      show (FlipArrow.mapLeaf b (FlipArrow.mapLeaf a ⟨w, hw⟩) : {w // w ∈ _}) = ⟨w, hw⟩
+      apply Subtype.ext
+      dsimp [FlipArrow.mapLeaf]
+      rw [hab]
+      exact Tree.flipWord_involutive b.v w
+    | commute a₁ a₂ b₁ b₂ h1 h2 hv hw =>
+      rw [Functor.map_comp, Functor.map_comp]
+      erw [Paths.lift_toPath, Paths.lift_toPath, Paths.lift_toPath, Paths.lift_toPath]
+      ext ⟨w, h_w⟩
+      show (FlipArrow.mapLeaf a₂ (FlipArrow.mapLeaf a₁ ⟨w, h_w⟩) : {w // w ∈ _}) =
+           (FlipArrow.mapLeaf b₂ (FlipArrow.mapLeaf b₁ ⟨w, h_w⟩) : {w // w ∈ _})
+      apply Subtype.ext
+      dsimp [FlipArrow.mapLeaf]
+      rw [h1, h2]
+      exact flipWord_commute b₂.v b₁.v (h1 ▸ hv) (h2 ▸ hw) w
+    | root a₁ a₂ b₁ b₂ h1 h2 h3 hne =>
+      rw [Functor.map_comp, Functor.map_comp]
+      erw [Paths.lift_toPath, Paths.lift_toPath, Paths.lift_toPath, Paths.lift_toPath]
+      ext ⟨w, h_w⟩
+      show (FlipArrow.mapLeaf a₂ (FlipArrow.mapLeaf a₁ ⟨w, h_w⟩) : {w // w ∈ _}) =
+           (FlipArrow.mapLeaf b₂ (FlipArrow.mapLeaf b₁ ⟨w, h_w⟩) : {w // w ∈ _})
+      apply Subtype.ext
+      dsimp [FlipArrow.mapLeaf]
+      rw [h1, h2, h3]
+      exact flipWord_root b₁.v hne w)
 
 /-- **Proposition 4.13.** If `τ` is recursively regular, every `φ ∈ Aut(τ)` is a composite
 `(v_n, τ) ∘ ⋯ ∘ (v_1, τ)` of flips at symmetry vertices `v_i` with `v_i ≺ v_j` for `i < j`
@@ -1014,8 +1181,20 @@ theorem Trees.aut_symmetric (τ : Tree) (hτ : τ.IsRecursivelyRegular) (h3 : 3 
 
 namespace Tree
 
+/-- Recursive helper for `Tree.prec` using fuel on tree arity. -/
+def precAux (fuel : ℕ) (τ τ' : Tree) : Prop :=
+  match fuel with
+  | 0 => False
+  | fuel + 1 =>
+    τ.arity < τ'.arity ∨
+      (τ.arity = τ'.arity ∧
+        ∃ (hl : [false] ∈ τ.carrier) (hr : [true] ∈ τ.carrier)
+          (hl' : [false] ∈ τ'.carrier) (hr' : [true] ∈ τ'.carrier),
+          precAux fuel (τ.left hl) (τ'.left hl') ∨
+          (τ.left hl = τ'.left hl' ∧ precAux fuel (τ.right hr) (τ'.right hr')))
+
 /-- The total order on trees: first by arity, then by `τ/λ ≺ τ'/λ`, then by `τ/ρ ≺ τ'/ρ`. -/
-def prec (τ τ' : Tree) : Prop := τ.arity < τ'.arity ∨ sorry
+def prec (τ τ' : Tree) : Prop := precAux τ.arity τ τ'
 
 end Tree
 

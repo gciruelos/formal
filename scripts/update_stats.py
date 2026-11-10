@@ -173,7 +173,9 @@ def load_projects() -> list[Project]:
     lake = tomllib.loads((LEAN_ROOT / "lakefile.toml").read_text())
     works = tomllib.loads((LEAN_ROOT / "works.toml").read_text())
     projects = []
-    for lib in (l["name"] for l in lake["lean_lib"]):
+    # Vendored third-party libraries (srcDir under vendor/) are not formalized works.
+    for lib in (l["name"] for l in lake["lean_lib"]
+                if not l.get("srcDir", "").startswith("vendor/")):
         if lib not in works:
             raise RuntimeError(f"lean_lib {lib} has no [{lib}] table in works.toml")
         files = [LEAN_ROOT / f"{lib}.lean", *sorted((LEAN_ROOT / lib).glob("*.lean"), key=natural_key)]
