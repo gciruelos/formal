@@ -45,6 +45,27 @@ def wdeg (w : FreeMonoid V.G) : ℕ := (w.toList.map V.deg).sum
 def hom (n : ℕ) : Submodule k (FreeAlg k V.G) :=
   Submodule.span k (mono '' {w | V.wdeg w = n})
 
+/-- Multiplication adds homogeneous degrees, used for the adjoint derivation in
+Chapter 4, §2.2. -/
+theorem hom_mul {n m : ℕ} {x y : FreeAlg k V.G}
+    (hx : x ∈ V.hom n) (hy : y ∈ V.hom m) : x * y ∈ V.hom (n + m) := by
+  induction hx using Submodule.span_induction with
+  | mem x hx =>
+    obtain ⟨u, hu, rfl⟩ := hx
+    induction hy using Submodule.span_induction with
+    | mem y hy =>
+      obtain ⟨v, hv, rfl⟩ := hy
+      apply Submodule.subset_span
+      refine ⟨u * v, ?_, ?_⟩
+      · simpa [wdeg, FreeMonoid.toList_mul, List.map_append, List.sum_append] using congrArg₂ (· + ·) hu hv
+      · simp [mono, MonoidAlgebra.single_mul_single]
+    | zero => simp
+    | add y z _ _ hy hz => rw [mul_add]; exact add_mem hy hz
+    | smul c y _ hy => rw [mul_smul_comm]; exact Submodule.smul_mem _ c hy
+  | zero => simp
+  | add x z _ _ hx hz => rw [add_mul]; exact add_mem hx hz
+  | smul c x _ hx => rw [smul_mul_assoc]; exact Submodule.smul_mem _ c hx
+
 /-- The decomposable elements: combinations of monomials of length at least two. -/
 def decomposable : Submodule k (FreeAlg k V.G) :=
   Submodule.span k (mono '' {w : FreeMonoid V.G | 2 ≤ w.toList.length})

@@ -125,10 +125,47 @@ def Der (δ : ℤ) : Set (FreeAlg k B.G →ₗ[k] FreeAlg k B.G) :=
 def ad (n : ℕ) (b : FreeAlg k B.G) : FreeAlg k B.G →ₗ[k] FreeAlg k B.G :=
   linOnMonomials fun w => b * mono w - ((-1 : k) ^ (n * B.wdeg w)) • (mono w * b)
 
+/-- The adjoint on a monomial, used to check its graded Leibniz rule. -/
+theorem ad_mono (n : ℕ) (b : FreeAlg k B.G) (w : FreeMonoid B.G) :
+    B.ad n b (mono w) = b * mono w - (-1 : k) ^ (n * B.wdeg w) • (mono w * b) := by
+  simp [ad, linOnMonomials, mono]
+
+/-- The adjoint on a homogeneous element, used to check its degree shift. -/
+theorem ad_hom (n m : ℕ) (b x : FreeAlg k B.G) (hx : x ∈ B.hom m) :
+    B.ad n b x = b * x - (-1 : k) ^ (n * m) • (x * b) := by
+  induction hx using Submodule.span_induction with
+  | mem x hx =>
+    obtain ⟨w, hw, rfl⟩ := hx
+    rw [ad_mono, hw]
+  | zero => simp
+  | add x y _ _ hx hy => simp [map_add, hx, hy, mul_add, add_mul, smul_add]; abel
+  | smul c x _ hx => simp [map_smul, hx, smul_sub, smul_smul, mul_comm]
+
 /-- **§4.2.2.** `Ad_b` is a graded derivation of degree `|b|`. -/
 theorem ad_mem_der (n : ℕ) (b : FreeAlg k B.G) (hb : b ∈ B.hom n) :
     B.ad n b ∈ B.Der n := by
-  sorry
+  constructor
+  · intro m x hx hpos
+    rw [ad_hom B n m b x hx]
+    have hm : ((m : ℤ) + (n : ℤ)).toNat = n + m := by omega
+    rw [hm]
+    apply Submodule.sub_mem
+    · exact GradedGens.hom_mul B.toGradedGens hb hx
+    · apply Submodule.smul_mem
+      simpa only [Nat.add_comm] using GradedGens.hom_mul B.toGradedGens hx hb
+  · intro m x hx hneg
+    omega
+  · intro a c
+    have hm : (mono a * mono c : FreeAlg k B.G) = mono (a * c) := by
+      simp [mono, MonoidAlgebra.single_mul_single]
+    rw [hm, ad_mono, ad_mono, ad_mono]
+    have hd : B.wdeg (a * c) = B.wdeg a + B.wdeg c := by
+      simp [GradedGens.wdeg, FreeMonoid.toList_mul, List.map_append, List.sum_append]
+    simp only [hd, Nat.mul_add, pow_add, Int.natAbs_natCast]
+    rw [← hm]
+    simp only [sub_mul, mul_sub, smul_sub, mul_smul_comm, smul_mul_assoc, mul_assoc,
+      smul_smul]
+    abel
 
 /-- **§4.2.2.** The commutator map `Co : B ⊗ V → B`, `b ⊗ v ↦ [v, b]`, on a monomial `b` and a
 generator `v`. -/
@@ -167,6 +204,19 @@ def kahlerMap : FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G →ₗ[
     TensorProduct.map LinearMap.id (LinearMap.mul' k _ ∘ₗ TensorProduct.map (genIncl B) LinearMap.id) ∘ₗ
       (TensorProduct.assoc k (FreeAlg k B.G) (B.G →₀ k) (FreeAlg k B.G)).toLinearMap
 
+/-- The map to differentials respects left multiplication, used in Lemma 2.4. -/
+theorem kahlerMap_mulLeft (a : FreeAlg k B.G)
+    (x : (FreeAlg k B.G ⊗[k] (B.G →₀ k)) ⊗[k] FreeAlg k B.G) :
+    kahlerMap B (TensorProduct.map
+      (TensorProduct.map (LinearMap.mulLeft k a) LinearMap.id) LinearMap.id x) =
+    TensorProduct.map (LinearMap.mulLeft k a) LinearMap.id (kahlerMap B x) := by
+  induction x using TensorProduct.inductionOn with
+  | add x y hx hy => simp only [map_add, hx, hy]
+  | tmul av c =>
+    induction av using TensorProduct.inductionOn with
+    | add x y hx hy => simp only [add_tmul, map_add, hx, hy]
+    | tmul b v => simp [kahlerMap, mul_assoc]
+
 /-- **Lemma 2.2.** For a quasi-free `B = T(V)`, the map `g : B ⊗ V ⊗ B → Ω¹_B` is an isomorphism
 of `B`-bimodules: it is injective with image `Ω¹_B`. -/
 theorem lemma_2_2 :
@@ -186,7 +236,11 @@ def barProj : List B.G → FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k 
 map of complexes, and `S*(B)` is a homotopy retract of the bar resolution. -/
 theorem lemma_2_4 (w : List B.G) :
     kahlerMap B (barProj B w) = mono (FreeMonoid.ofList w) ⊗ₜ 1 - 1 ⊗ₜ mono (FreeMonoid.ofList w) := by
-  sorry
+  induction w with
+  | nil => simp [barProj, ← MonoidAlgebra.one_def]
+  | cons v w ih =>
+    rw [barProj, map_add, kahlerMap_mulLeft, ih]
+    simp [kahlerMap, genIncl, Finsupp.linearCombination_single]
 
 end QuasiFree
 

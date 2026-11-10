@@ -13,6 +13,7 @@ For every module of the project it reports
   project (dependencies outside the project, i.e. Mathlib, are assumed sorry-free);
 * `direct_sorry`: declarations of any kind whose statement or body contains `sorryAx`,
   reported under their user-facing name (auxiliary `_proof_n` declarations are folded in).
+* `max_ratio`: the largest proof-to-statement DAG size ratio among sorry-free user-written theorems.
 It also reports, for each name passed in `MAIN`, whether it depends on `sorry`, its axioms, and
 the declarations with a direct `sorry` that it reaches (`sorry_leaves`).
 -/
@@ -56,6 +57,15 @@ partial def sorryLeaves (env : Environment) (inProject : Name → Bool) (n : Nam
   for c in used do
     if inProject c then sorryLeaves env inProject c
 
+structure DagSizes where
+  proof : Nat
+  statement : Nat
+  deriving ToJson
+
+def theoremDagSizes (thm : TheoremVal) : IO DagSizes := do
+  return ⟨← (ShareCommon.shareCommon' thm.value).numObjs,
+          ← (ShareCommon.shareCommon' thm.type).numObjs⟩
+
 structure ModRow where
   theorems : Nat := 0
   dependent : List Name := []
@@ -64,6 +74,9 @@ structure ModRow where
   maxProofName : Name := .anonymous
   maxStatement : Nat := 0
   maxStatementName : Name := .anonymous
+  maxRatio : DagSizes := ⟨0, 1⟩
+  maxRatioName : Name := .anonymous
+  maxRatioLine : Nat := 0
 
 run_cmd do
   let env ← getEnv
@@ -84,18 +97,24 @@ run_cmd do
       row := { row with direct := userName n :: row.direct }
     if let .thmInfo thm := info then
       -- DAG sizes (hash-consed), over all theorem declarations including generated ones.
-      let size ← (ShareCommon.shareCommon' thm.value).numObjs
-      let stmt ← (ShareCommon.shareCommon' thm.type).numObjs
+      let sizes ← theoremDagSizes thm
+      let size := sizes.proof
+      let stmt := sizes.statement
       if size > row.maxProof || (size == row.maxProof && n.toString < row.maxProofName.toString) then
         row := { row with maxProof := size, maxProofName := n }
       if stmt > row.maxStatement ||
           (stmt == row.maxStatement && n.toString < row.maxStatementName.toString) then
         row := { row with maxStatement := stmt, maxStatementName := n }
-      if !n.isInternalDetail && (← findDeclarationRanges? n).isSome then
+      if let (false, some ranges) := (n.isInternalDetail, ← findDeclarationRanges? n) then
         let (b, memo') := (dependsOnSorry env inProject n).run memo
         memo := memo'
         row := { row with theorems := row.theorems + 1,
                           dependent := if b then n :: row.dependent else row.dependent }
+        let lhs := size * row.maxRatio.statement
+        let rhs := row.maxRatio.proof * stmt
+        if !b && (lhs > rhs || (lhs == rhs && n.toString < row.maxRatioName.toString)) then
+          row := { row with maxRatio := sizes, maxRatioName := n,
+                            maxRatioLine := ranges.selectionRange.pos.line }
     rows := rows.insert m row
   let mods := rows.toList.map fun (m, r) => Json.mkObj [
     ("module", toJson m.toString),
@@ -105,7 +124,10 @@ run_cmd do
     ("max_proof_dag", toJson r.maxProof),
     ("max_proof_name", toJson r.maxProofName.toString),
     ("max_statement_dag", toJson r.maxStatement),
-    ("max_statement_name", toJson r.maxStatementName.toString)]
+    ("max_statement_name", toJson r.maxStatementName.toString),
+    ("max_ratio", toJson r.maxRatio),
+    ("max_ratio_name", toJson r.maxRatioName.toString),
+    ("max_ratio_line", toJson r.maxRatioLine)]
   let mut main : List Json := []
   for n in mainNames do
     if env.contains n then

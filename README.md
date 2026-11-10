@@ -10,12 +10,12 @@ lake build                # all of them
 
 <!-- BEGIN GENERATED: projects -->
 
-| Project | Work | Scope | Lines | Sorry-free theorems | `sorry` | Main results proved | Gaps found |
-|:---|:---|:---|---:|---:|---:|---:|---:|
-| [MartinPhd](MartinPhd/README.md) | Fernando Daniel Martin, *Aspectos homológicos de la teoría de especies* (PhD thesis, Universidad de Buenos Aires, 2024) | Chapters 1–4 (Chapter 1 proved; Chapters 2–4 outline) | 27,521 | 1314/1379 | 113 | 5/5 | 15 (3 open) |
-| [ScoccolaPhd](ScoccolaPhd/README.md) | Luis N. Scoccola, *Locally Persistent Categories and Metric Properties of Interleaving Distances* (PhD thesis, Western University, 2020) | Chapters 2–6 | 15,632 | 746/778 | 30 | 10/10 | 13 (3 open) |
-| [CiruelosLic](CiruelosLic/README.md) | Gonzalo Ciruelos Rodríguez, *Factorizing Derivations via Intersection Types* (Licenciatura thesis, Universidad de Buenos Aires, 2018) | Whole thesis, plus the cited orthogonality of β-reduction | 13,280 | 716/716 | 0 | 5/5 | 8 (0 open) |
-| [TamaroffPhd](TamaroffPhd/README.md) | Pedro Tamaroff, *Homotopical and effective methods for associative algebras* (PhD thesis, Trinity College Dublin, 2021) | Chapters 2–6 (outline: definitions and statements) | 4,324 | 121/208 | 89 | 1/5 | 2 (1 open) |
+| Project | Work | Scope | Lines | Sorry-free theorems | `sorry` | Main results proved | Gaps found | Most interesting result ([interestingness](https://arxiv.org/abs/2609.28603)) |
+|:---|:---|:---|---:|---:|---:|---:|---:|:---|
+| [MartinPhd](MartinPhd/README.md) | Fernando Daniel Martin, *Aspectos homológicos de la teoría de especies* (PhD thesis, Universidad de Buenos Aires, 2024) | Chapters 1–4 (Chapter 1 proved; Chapters 2–4 outline) | 27,521 | 1314/1379 | 113 | 5/5 | 15 (3 open) | [<code>Bicomod.toE_toBicomod</code>](MartinPhd/Chapter1Section3Exponential.lean#L1877) (263.27) |
+| [ScoccolaPhd](ScoccolaPhd/README.md) | Luis N. Scoccola, *Locally Persistent Categories and Metric Properties of Interleaving Distances* (PhD thesis, Western University, 2020) | Chapters 2–6 | 15,632 | 746/778 | 30 | 10/10 | 13 (3 open) | [<code>ffsCpx_powered</code>](ScoccolaPhd/Chapter6Section5ClusteringDiagrams.lean#L920) (1,692.36) |
+| [CiruelosLic](CiruelosLic/README.md) | Gonzalo Ciruelos Rodríguez, *Factorizing Derivations via Intersection Types* (Licenciatura thesis, Universidad de Buenos Aires, 2018) | Whole thesis, plus the cited orthogonality of β-reduction | 13,280 | 716/716 | 0 | 5/5 | 8 (0 open) | [<code>distRS.orthogonal_core</code>](CiruelosLic/Chapter3ResidualTheory.lean#L403) (755.67) |
+| [TamaroffPhd](TamaroffPhd/README.md) | Pedro Tamaroff, *Homotopical and effective methods for associative algebras* (PhD thesis, Trinity College Dublin, 2021) | Chapters 2–6 (outline: definitions and statements) | 4,617 | 136/217 | 79 | 1/5 | 2 (1 open) | [<code>RewritingSystem.wf_strictStep</code>](TamaroffPhd/Chapter6Section4DiamondLemma.lean#L474) (138.45) |
 
 <!-- END GENERATED: projects -->
 
@@ -24,6 +24,10 @@ proved* counts the headline theorems listed for each work in `works.toml` that a
 `sorry`-free. *Gaps found* counts the places where the formalization had to correct or complete
 the source: errors, proof gaps, missing hypotheses, unproved claims, imprecise statements and
 typos. *Open* means the Lean declaration carrying the note still depends on `sorry`.
+
+*Most interesting result* shows the highest ratio of elaborated proof DAG size to statement DAG size
+among the work's sorry-free user-written theorems. Each score names and links to its theorem.
+The ratio adapts Patel et al.'s §3.1 measure, which uses proof source lines and statement characters.
 
 ## Layout of a project
 
@@ -61,8 +65,8 @@ produced by the script between markers; everything else is written by hand.
 3. **`## Main results`.** A numbered list of the 1–5 most important results, one line each
    (source numbering plus a plain-words statement). They are the `[[<Lib>.main]]` entries of
    `works.toml`, in the same order. Below the list, *(generated)* block `main`: a small table
-   with, per result, its Lean name, how many `sorry`'d declarations it depends on, and whether
-   it is proved.
+   with, per result, its Lean name, how many declarations with `sorry` it reaches through its
+   statement or proof (including its own declaration), and whether it is proved.
 4. **`## The results in brief`.** A short explanation of the main results for a mathematician
    who does not know the area: what the objects are, what each result says, and why it
    matters. Sell the results at a high level and keep the details for the Lean docstrings.

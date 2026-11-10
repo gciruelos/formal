@@ -69,7 +69,11 @@ def IsPerfectWalk (ws : List (List Q.A)) : Prop :=
 `R(pᵢ) = {p_{i+1}}` and `L(pᵢ) = {p_{i-1}}`. -/
 theorem IsPerfectWalk.rightCof_eq {ws : List (List Q.A)} (h : IsPerfectWalk R ws) (i : ℕ)
     (hi : i + 1 < ws.length) : rightCof R (ws.getD i []) = {ws.getD (i + 1) []} := by
-  sorry
+  obtain ⟨_, ps, hps, hws⟩ := h
+  have hlen : 0 < ps.length := List.length_pos_iff.mpr hps.1
+  have hp := hps.2 (i % ps.length) (Nat.mod_lt _ hlen)
+  rw [hws i (by omega), hws (i + 1) hi]
+  simpa only [Nat.add_mod, Nat.mod_mod] using hp.2.2.1
 
 /-! ## Extending Anick chains (§5.1.4) -/
 
@@ -89,7 +93,31 @@ theorem prop_1_10 (hR : (Q.data R).IsMinimal) {n : ℕ} {γ : List Q.A}
     (ht : (Q.data R).tail n γ = p₀) :
     (Q.data R).IsChain (n + 1) (γ ++ p₁) p₁ ∧
       ∀ α, γ ++ α ∈ (Q.data R).Chains (n + 1) → α = p₁ := by
-  sorry
+  have hmem : p₁ ∈ rightCof R ((Q.data R).tail n γ) := by
+    rw [ht, hp.2.2.1]
+    exact Set.mem_singleton _
+  refine ⟨((lemma_1_9 R hR hγ p₁ p₁).1).2 hmem, ?_⟩
+  intro α hα
+  obtain ⟨t, htchain⟩ := hα
+  have hfull := htchain
+  obtain ⟨_, _, ⟨c', t', hc', heq, _⟩, _⟩ := htchain
+  obtain ⟨tγ, hγchain⟩ := hγ
+  have hprefix : c' = γ := by
+    have hp₁ : c' <+: γ ++ α := ⟨t, heq.symm⟩
+    have hp₂ : γ <+: γ ++ α := List.prefix_append _ _
+    rcases List.prefix_or_prefix_of_prefix hp₁ hp₂ with h₁ | h₂
+    · by_contra hne
+      exact hγchain.not_prefix h₁ hne hc'
+    · by_contra hne
+      exact hc'.not_prefix h₂ (Ne.symm hne) hγchain
+  have htail : t = α := by
+    rw [hprefix] at heq
+    exact List.append_cancel_left heq.symm
+  have htα : (Q.data R).IsChain (n + 1) (γ ++ α) α := by
+    simpa only [htail] using hfull
+  have hcof := ((lemma_1_9 R hR ⟨tγ, hγchain⟩ α α).1).1 htα
+  rw [ht, hp.2.2.1, Set.mem_singleton_iff] at hcof
+  exact hcof
 
 /-- **Corollary 1.11 (Unique extension property).** (i) If `t_γ = p₀` is perfect, extended to a
 perfect walk `(p₀, p₁, …)`, then `γα` is an `(n+k)`-chain for some `k ≥ 1` iff

@@ -197,8 +197,33 @@ def torCoalgebra : AInfCoalgebra k where
   deg γ := γ.deg + 1
   deg_pos _ := Nat.succ_pos _
   Δ := torDelta k W
-  cobar_mem := sorry
-  cobar_zero := sorry
+  cobar_mem γ := by
+    let L := linOnMonomials (k := k) (fun w : FreeMonoid (monData W).Chain =>
+      desuspSign k (fun c => c.deg + 1) w.toList • (mono w : FreeAlg k (monData W).Chain))
+    change L (torDelta k W γ) ∈ _
+    apply finsum_induction (p := fun x => L x ∈ _)
+    · simp
+    · intro x y hx hy
+      simpa only [map_add] using Submodule.add_mem _ hx hy
+    · intro ds
+      rw [map_smul]
+      apply Submodule.smul_mem
+      have hmono : L (mono (FreeMonoid.ofList ds.val)) =
+          desuspSign k (fun c => c.deg + 1) ds.val • mono (FreeMonoid.ofList ds.val) := by
+        simp [L, linOnMonomials, mono, Finsupp.linearCombination_single]
+      rw [hmono]
+      apply Submodule.smul_mem
+      apply Submodule.subset_span
+      refine ⟨_, ?_, rfl⟩
+      have hsum := ds.2.2.2
+      simp only [Set.mem_ofPred_eq, GradedGens.wdeg]
+      simpa using (show (ds.val.map Chain.deg).sum = γ.deg + 1 - 2 by omega)
+  cobar_zero γ hγ := by
+    have hempty : IsEmpty ((monData W).Decomposition γ) := ⟨fun ds => by
+      have hsum := ds.2.2.2
+      have hz : γ.deg = 0 := by omega
+      omega⟩
+    simp [cobarDiffOf, torDelta, finsum_of_isEmpty, linOnMonomials]
 
 /-- **Theorem 2.1.** The coproducts of `torCoalgebra` satisfy the Stasheff identities and form a
 canonical minimal A∞-coalgebra structure on `Tor_A`: its ∞-cobar construction is a model of

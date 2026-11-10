@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from dataclasses import dataclass, field
+from fractions import Fraction
 import html
 import json
 from pathlib import Path
@@ -34,6 +35,7 @@ import tomllib
 
 LEAN_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = LEAN_ROOT / "scripts" / "proof_stats.lean"
+INTERESTINGNESS = "Most interesting result ([interestingness](https://arxiv.org/abs/2609.28603))"
 # Gap kinds, most serious first, with the severity shown in the README.
 GAP_SEVERITY = {"error": "high", "missing hypothesis": "high", "proof gap": "medium",
                 "unproved": "medium", "imprecise": "low", "typo": "low"}
@@ -296,16 +298,15 @@ def main_block(p: Project) -> str:
     if not mains:
         return "_No headline results configured in `works.toml`._"
     info = {m["name"]: m for m in (p.lean or {}).get("main", [])}
-    rows = ["| Result | Lean | `sorry`s it depends on | Status |", "|:---|:---|---:|:---|"]
+    rows = ["| Result | Lean | Open `sorry` declarations | Status |", "|:---|:---|---:|:---|"]
     for m in mains:
         i = info.get(m["name"], {})
         if not i.get("found"):
             n, status = "—", "not found"
         else:
-            leaves = {short(x, p) for x in i.get("sorry_leaves", [])}
-            own = short(m["name"], p) in leaves
-            n = len(leaves - {short(m["name"], p)})
-            status = ("statement only (its proof is `sorry`)" if own
+            leaves = set(i["sorry_leaves"])
+            n = len(leaves)
+            status = ("open (contains `sorry`)" if m["name"] in leaves
                       else "open" if i["sorry"] else "**proved**")
             extra = set(i["axioms"]) - {"propext", "Classical.choice", "Quot.sound", "sorryAx"}
             if extra:
@@ -316,9 +317,9 @@ def main_block(p: Project) -> str:
 
 MAIN_LEGEND = """
 
-*`sorry`s it depends on* counts the other declarations of this project with an explicit
-`sorry` that the result reaches through its statement and proof. For a result whose own proof
-is still `sorry` this only covers its statement. A **proved** result uses only `propext`,
+*Open `sorry` declarations* counts distinct declarations in this project that contain `sorry`
+and are reached through the result's statement or proof, including the result itself when it
+contains `sorry`. A **proved** result uses only `propext`,
 `Classical.choice` and `Quot.sound`, unless other axioms are listed."""
 
 
@@ -334,11 +335,24 @@ def dag_cell(m: dict | None, kind: str, p: Project) -> str:
     return f"{m[f'max_{kind}_dag']:,} (<code>{html.escape(short(m[f'max_{kind}_name'], p))}</code>)"
 
 
+def interestingness(m: dict | None) -> Fraction:
+    sizes = m.get("max_ratio") if m else None
+    return Fraction(sizes["proof"], sizes["statement"]) if sizes else Fraction(0)
+
+
+def interestingness_cell(m: dict | None, path: str, p: Project) -> str:
+    ratio = interestingness(m)
+    if not ratio:
+        return "—"
+    name = html.escape(short(m["max_ratio_name"], p))
+    return f"[<code>{name}</code>]({path}#L{m['max_ratio_line']}) ({float(ratio):,.2f})"
+
+
 def stats_block(p: Project) -> str:
     lean = {m["module"]: m for m in (p.lean or {}).get("modules", [])}
     rows = ["| Prefix | File | Lines | Statements | Defs | Types | `sorry`s | "
-            "Max statement DAG (statement) | Max proof DAG (proof) | Theorems with `sorry` |",
-            "|:---|:---|---:|---:|---:|---:|---:|:---|:---|:---|"]
+            f"Max statement DAG (statement) | Max proof DAG (proof) | {INTERESTINGNESS} | Theorems with `sorry` |",
+            "|:---|:---|---:|---:|---:|---:|---:|:---|:---|:---|:---|"]
     tot = Counter()
     best = {"statement": (0, None), "proof": (0, None)}
     prev = None
@@ -360,12 +374,13 @@ def stats_block(p: Project) -> str:
         prev = prefix
         vals = [c[k] for k in ("lines", "statements", "defs", "types", "sorry")]
         rows.append(f"| {cell} | [{suffix}]({rel}) | " + " | ".join(f"{v:,}" for v in vals)
-                    + f" | {dag_cell(m, 'statement', p)} | {dag_cell(m, 'proof', p)} | {names} |")
+                    + f" | {dag_cell(m, 'statement', p)} | {dag_cell(m, 'proof', p)}"
+                    + f" | {interestingness_cell(m, rel, p)} | {names} |")
     vals = [tot[k] for k in ("lines", "statements", "defs", "types", "sorry")]
     mx = [f"**{best[k][0]:,}** (<code>{html.escape(short(best[k][1][f'max_{k}_name'], p))}</code>)"
           if best[k][1] else "—" for k in ("statement", "proof")]
     rows.append("| **Total / maximum** | | " + " | ".join(f"**{v:,}**" for v in vals)
-                + f" | {mx[0]} | {mx[1]} | |")
+                + f" | {mx[0]} | {mx[1]} | | |")
     return "\n".join(rows) + STATS_LEGEND
 
 
@@ -382,6 +397,8 @@ module appears last.
 - **Max statement DAG (statement)** is the size of the largest elaborated theorem type;
   **Max proof DAG (proof)** the largest theorem body (hash-consed expression DAG), each with
   the declaration's name. Both include compiler-generated theorems.
+- **Most interesting result** shows the highest proof DAG size divided by statement DAG size among
+  sorry-free user-written theorems in the file. The name links to the Lean statement.
 - **Theorems with `sorry`** lists declarations (of any kind) whose own term contains `sorryAx`.
 
 Generated by [`scripts/update_stats.py`](../scripts/update_stats.py)."""
@@ -401,13 +418,17 @@ def index_row(p: Project) -> str:
     open_gaps = sum(1 for g in gaps if gap_status(g, p).startswith("open"))
     tot = sum(x["theorems"] for x in (p.lean or {}).get("modules", []))
     free = tot - sum(len(x["sorry_dependent"]) for x in (p.lean or {}).get("modules", []))
+    modules = {x["module"]: x for x in (p.lean or {}).get("modules", [])}
+    best = max(p.files, key=lambda f: interestingness(modules.get(p.module(f))), default=None)
+    score = (interestingness_cell(modules.get(p.module(best)), best.relative_to(LEAN_ROOT).as_posix(), p)
+             if best else "—")
     return (f"| [{p.name}]({p.name}/README.md) | {work} | {m.get('scope', '')} | {c['lines']:,} | "
-            f"{free}/{tot} | {c['sorry']} | {proved}/{len(mains)} | {len(gaps)} ({open_gaps} open) |")
+            f"{free}/{tot} | {c['sorry']} | {proved}/{len(mains)} | {len(gaps)} ({open_gaps} open) | {score} |")
 
 
 def index_block(projects: list[Project]) -> str:
     rows = ["| Project | Work | Scope | Lines | Sorry-free theorems | `sorry` | Main results proved "
-            "| Gaps found |", "|:---|:---|:---|---:|---:|---:|---:|---:|"]
+            f"| Gaps found | {INTERESTINGNESS} |", "|:---|:---|:---|---:|---:|---:|---:|---:|:---|"]
     rows += [index_row(p) for p in projects]
     return "\n".join(rows)
 

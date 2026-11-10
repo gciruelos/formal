@@ -20,7 +20,7 @@ for all of them at once.
 
 <!-- BEGIN GENERATED: main -->
 
-| Result | Lean | `sorry`s it depends on | Status |
+| Result | Lean | Open `sorry` declarations | Status |
 |:---|:---|---:|:---|
 | Theorem A (4.2.2) | `LPFunctor.quotientInterleavingDist_le_of_acyclic` | 0 | **proved** |
 | Theorem B (4.1.4) | `quotientInterleavingDist_eq_inf_quotientInterleaved` | 0 | **proved** |
@@ -33,9 +33,9 @@ for all of them at once.
 | Theorem D (4.4.2) | `interleavingDist_intrinsic` | 0 | **proved** |
 | Theorem D (4.4.2 with Prop. 3.2.19) | `interleavingDist_intrinsic_of_powered` | 0 | **proved** |
 
-*`sorry`s it depends on* counts the other declarations of this project with an explicit
-`sorry` that the result reaches through its statement and proof. For a result whose own proof
-is still `sorry` this only covers its statement. A **proved** result uses only `propext`,
+*Open `sorry` declarations* counts distinct declarations in this project that contain `sorry`
+and are reached through the result's statement or proof, including the result itself when it
+contains `sorry`. A **proved** result uses only `propext`,
 `Classical.choice` and `Quot.sound`, unless other axioms are listed.
 
 <!-- END GENERATED: main -->
@@ -78,21 +78,21 @@ filtrations, clustering and kernel density estimates.
 
 <!-- BEGIN GENERATED: stats -->
 
-| Prefix | File | Lines | Statements | Defs | Types | `sorry`s | Max statement DAG (statement) | Max proof DAG (proof) | Theorems with `sorry` |
-|:---|:---|---:|---:|---:|---:|---:|:---|:---|:---|
-| **Chapter2Section1** | [Metric.lean](Chapter2Section1Metric.lean) | 1,737 | 59 | 31 | 2 | 0 | 198 (<code>exists_path_of_retract</code>) | 5,553 (<code>glue_isPathOn</code>) | — |
-| **Chapter2Section4** | [EnrichedPersistent.lean](Chapter2Section4EnrichedPersistent.lean) | 1,494 | 33 | 45 | 13 | 0 | 767 (<code>HomotopicalAlgebra.AttachCells.flatten._proof_6</code>) | 20,031 (<code>isLeftKanExtension_yoneda</code>) | — |
-| **Chapter3Section1** | [LPCategories.lean](Chapter3Section1LPCategories.lean) | 1,365 | 36 | 31 | 13 | 0 | 646 (<code>LPFunctor.mk.injEq</code>) | 45,489 (<code>TerminalMidpoint.factor</code>) | — |
-| **Chapter3Section2** | [PowersLimits.lean](Chapter3Section2PowersLimits.lean) | 1,954 | 108 | 39 | 0 | 0 | 692 (<code>PersistentObjects.copowTo_app</code>) | 7,902 (<code>coneElt_comp_h</code>) | — |
-| **Chapter4Section1** | [QuotientDistances.lean](Chapter4Section1QuotientDistances.lean) | 1,402 | 62 | 18 | 5 | 0 | 475 (<code>TopologizedHoms.mk.injEq</code>) | 6,331 (<code>interleavingFunctor_rightContinuous</code>) | — |
-| **Chapter4Section3** | [CompletenessObservable.lean](Chapter4Section3CompletenessObservable.lean) | 1,044 | 58 | 28 | 5 | 0 | 554 (<code>RowStep.mk.injEq</code>) | 4,091 (<code>exists_cat_structure</code>) | — |
-| **Chapter5Section1** | [ChangeOfEnrichment.lean](Chapter5Section1ChangeOfEnrichment.lean) | 1,614 | 91 | 35 | 7 | 1 | 1,642 (<code>QCopoweredByRepresentables.mk.injEq</code>) | 27,095 (<code>exists_lpcat_sublinear</code>) | <code>persistent_quotient_dist</code> |
-| **Chapter5Section2** | [Flows.lean](Chapter5Section2Flows.lean) | 1,205 | 63 | 34 | 2 | 4 | 1,705 (<code>QFlow.mk.inj</code>) | 4,817 (<code>QFlow.mk.injEq</code>) | <code>Flow.exists_flow_kleisli</code>, <code>Flow.exists_weakPower</code>, <code>Flow.interleavingDist_complete</code>, <code>interleavingDist_complete_of_weakPower</code> |
-| **Chapter6Section1** | [DissimilarityFiltrations.lean](Chapter6Section1DissimilarityFiltrations.lean) | 1,444 | 57 | 36 | 4 | 10 | 431 (<code>Diss.limitConeIsLimit._proof_4</code>) | 4,064 (<code>Diss.exists_copowered</code>) | <code>epMet_coherentFactorizations_compact</code>, <code>epMet_quotientInterleavingDist</code>, <code>epMetc_gromovHausdorff</code>, <code>ghInterleaving_eq_filteredDist</code>, <code>ghInterleaving_spec</code>, <code>gromovHausdorff_universal</code>, <code>homotopyInterleavingDist_intrinsic_complete</code>, <code>homotopyInterleavingDist_persistent</code>, <code>vrStar_lipschitz</code>, <code>weaklyEquivalent_tFib_of_fibrant</code> |
-| **Chapter6Section5** | [ClusteringDiagrams.lean](Chapter6Section5ClusteringDiagrams.lean) | 1,359 | 49 | 38 | 10 | 15 | 454 (<code>pdLPCat._proof_36</code>) | 47,386 (<code>ffsCpx_powered</code>) | <code>ffsCpx_limits</code>, <code>ffsCpx_quotientInterleavingDist_eq</code>, <code>ffsCpx_reflects</code>, <code>hCl_quotientInterleavingDist_eq</code>, <code>hCl_quotientInterleavingDist_spec</code>, <code>hCl_structure</code>, <code>isStableUnderWeightedPullbacks_acyclicFFSCpx</code>, <code>isStableUnderWeightedPullbacks_acyclicWDiss</code>, <code>kdf_uniformContinuous</code>, <code>quotientInterleavingDist_wDiss_le_ghp</code>, <code>rtSet_geodesic_complete</code>, <code>rtSet_structure</code>, <code>singleLinkage_compact</code>, <code>singleLinkage_equivalence</code> |
-| **PreliminariesProjectiveChainComplexes** | [.lean](PreliminariesProjectiveChainComplexes.lean) | 1,003 | 59 | 30 | 0 | 0 | 728 (<code>ProjectiveGenerators.surjective_quasiIso_boundaryLift</code>) | 8,661 (<code>ProjectiveGenerators.coverContraction._proof_2</code>) | — |
-| **ScoccolaPhd** | [.lean](../ScoccolaPhd.lean) | 11 | 0 | 0 | 0 | 0 | — | — | — |
-| **Total / maximum** | | **15,632** | **675** | **365** | **61** | **30** | **1,705** (<code>QFlow.mk.inj</code>) | **47,386** (<code>ffsCpx_powered</code>) | |
+| Prefix | File | Lines | Statements | Defs | Types | `sorry`s | Max statement DAG (statement) | Max proof DAG (proof) | Most interesting result ([interestingness](https://arxiv.org/abs/2609.28603)) | Theorems with `sorry` |
+|:---|:---|---:|---:|---:|---:|---:|:---|:---|:---|:---|
+| **Chapter2Section1** | [Metric.lean](Chapter2Section1Metric.lean) | 1,737 | 59 | 31 | 2 | 0 | 198 (<code>exists_path_of_retract</code>) | 5,553 (<code>glue_isPathOn</code>) | [<code>quotientDist_isIntrinsic</code>](Chapter2Section1Metric.lean#L1008) (146.24) | — |
+| **Chapter2Section4** | [EnrichedPersistent.lean](Chapter2Section4EnrichedPersistent.lean) | 1,494 | 33 | 45 | 13 | 0 | 767 (<code>HomotopicalAlgebra.AttachCells.flatten._proof_6</code>) | 20,031 (<code>isLeftKanExtension_yoneda</code>) | [<code>isLeftKanExtension_yoneda</code>](Chapter2Section4EnrichedPersistent.lean#L1112) (220.12) | — |
+| **Chapter3Section1** | [LPCategories.lean](Chapter3Section1LPCategories.lean) | 1,365 | 36 | 31 | 13 | 0 | 646 (<code>LPFunctor.mk.injEq</code>) | 45,489 (<code>TerminalMidpoint.factor</code>) | [<code>TerminalMidpoint.factor</code>](Chapter3Section1LPCategories.lean#L891) (208.67) | — |
+| **Chapter3Section2** | [PowersLimits.lean](Chapter3Section2PowersLimits.lean) | 1,954 | 108 | 39 | 0 | 0 | 692 (<code>PersistentObjects.copowTo_app</code>) | 7,902 (<code>coneElt_comp_h</code>) | [<code>hasTerminalMidpoints_of_powered</code>](Chapter3Section2PowersLimits.lean#L667) (73.32) | — |
+| **Chapter4Section1** | [QuotientDistances.lean](Chapter4Section1QuotientDistances.lean) | 1,402 | 62 | 18 | 5 | 0 | 475 (<code>TopologizedHoms.mk.injEq</code>) | 6,331 (<code>interleavingFunctor_rightContinuous</code>) | [<code>interleavingFunctor_rightContinuous</code>](Chapter4Section1QuotientDistances.lean#L1187) (129.20) | — |
+| **Chapter4Section3** | [CompletenessObservable.lean](Chapter4Section3CompletenessObservable.lean) | 1,044 | 58 | 28 | 5 | 0 | 554 (<code>RowStep.mk.injEq</code>) | 4,091 (<code>exists_cat_structure</code>) | [<code>rowStep_nonempty</code>](Chapter4Section3CompletenessObservable.lean#L400) (74.10) | — |
+| **Chapter5Section1** | [ChangeOfEnrichment.lean](Chapter5Section1ChangeOfEnrichment.lean) | 1,614 | 91 | 35 | 7 | 1 | 1,642 (<code>QCopoweredByRepresentables.mk.injEq</code>) | 27,095 (<code>exists_lpcat_sublinear</code>) | [<code>exists_changeOfEnrichment</code>](Chapter5Section1ChangeOfEnrichment.lean#L243) (267.71) | <code>persistent_quotient_dist</code> |
+| **Chapter5Section2** | [Flows.lean](Chapter5Section2Flows.lean) | 1,205 | 63 | 34 | 2 | 4 | 1,705 (<code>QFlow.mk.inj</code>) | 4,817 (<code>QFlow.mk.injEq</code>) | [<code>isIntrinsicDist_of_equiv</code>](Chapter5Section2Flows.lean#L158) (29.93) | <code>Flow.exists_flow_kleisli</code>, <code>Flow.exists_weakPower</code>, <code>Flow.interleavingDist_complete</code>, <code>interleavingDist_complete_of_weakPower</code> |
+| **Chapter6Section1** | [DissimilarityFiltrations.lean](Chapter6Section1DissimilarityFiltrations.lean) | 1,444 | 57 | 36 | 4 | 10 | 431 (<code>Diss.limitConeIsLimit._proof_4</code>) | 4,064 (<code>Diss.exists_copowered</code>) | [<code>epMet_admitsCoherentFactorizations</code>](Chapter6Section1DissimilarityFiltrations.lean#L934) (523.00) | <code>epMet_coherentFactorizations_compact</code>, <code>epMet_quotientInterleavingDist</code>, <code>epMetc_gromovHausdorff</code>, <code>ghInterleaving_eq_filteredDist</code>, <code>ghInterleaving_spec</code>, <code>gromovHausdorff_universal</code>, <code>homotopyInterleavingDist_intrinsic_complete</code>, <code>homotopyInterleavingDist_persistent</code>, <code>vrStar_lipschitz</code>, <code>weaklyEquivalent_tFib_of_fibrant</code> |
+| **Chapter6Section5** | [ClusteringDiagrams.lean](Chapter6Section5ClusteringDiagrams.lean) | 1,359 | 49 | 38 | 10 | 15 | 454 (<code>pdLPCat._proof_36</code>) | 47,386 (<code>ffsCpx_powered</code>) | [<code>ffsCpx_powered</code>](Chapter6Section5ClusteringDiagrams.lean#L920) (1,692.36) | <code>ffsCpx_limits</code>, <code>ffsCpx_quotientInterleavingDist_eq</code>, <code>ffsCpx_reflects</code>, <code>hCl_quotientInterleavingDist_eq</code>, <code>hCl_quotientInterleavingDist_spec</code>, <code>hCl_structure</code>, <code>isStableUnderWeightedPullbacks_acyclicFFSCpx</code>, <code>isStableUnderWeightedPullbacks_acyclicWDiss</code>, <code>kdf_uniformContinuous</code>, <code>quotientInterleavingDist_wDiss_le_ghp</code>, <code>rtSet_geodesic_complete</code>, <code>rtSet_structure</code>, <code>singleLinkage_compact</code>, <code>singleLinkage_equivalence</code> |
+| **PreliminariesProjectiveChainComplexes** | [.lean](PreliminariesProjectiveChainComplexes.lean) | 1,003 | 59 | 30 | 0 | 0 | 728 (<code>ProjectiveGenerators.surjective_quasiIso_boundaryLift</code>) | 8,661 (<code>ProjectiveGenerators.coverContraction._proof_2</code>) | [<code>ProjectiveGenerators.sphere_finitelyPresentable</code>](PreliminariesProjectiveChainComplexes.lean#L211) (80.86) | — |
+| **ScoccolaPhd** | [.lean](../ScoccolaPhd.lean) | 11 | 0 | 0 | 0 | 0 | — | — | — | — |
+| **Total / maximum** | | **15,632** | **675** | **365** | **61** | **30** | **1,705** (<code>QFlow.mk.inj</code>) | **47,386** (<code>ffsCpx_powered</code>) | | |
 
 The shared **Prefix** is the chapter/section; append **File** to recover the filename. The root
 module appears last.
@@ -105,6 +105,8 @@ module appears last.
 - **Max statement DAG (statement)** is the size of the largest elaborated theorem type;
   **Max proof DAG (proof)** the largest theorem body (hash-consed expression DAG), each with
   the declaration's name. Both include compiler-generated theorems.
+- **Most interesting result** shows the highest proof DAG size divided by statement DAG size among
+  sorry-free user-written theorems in the file. The name links to the Lean statement.
 - **Theorems with `sorry`** lists declarations (of any kind) whose own term contains `sorryAx`.
 
 Generated by [`scripts/update_stats.py`](../scripts/update_stats.py).

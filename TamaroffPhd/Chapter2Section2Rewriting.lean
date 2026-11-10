@@ -196,10 +196,57 @@ strictly decreases, where `A(m)` counts the divisors `xyz` of `m` and `B(m)` the
 theorem xyzSystem_isTerminating : (xyzSystem k).IsTerminating := by
   sorry
 
+/-- Each cube occurs with coefficient one in the rule of §2.2; used to exclude
+compatible total multiplicative orders. -/
+theorem xyzSystem_cube_mem_supp (a : XYZ) : FreeMonoid.of a ^ 3 ∈ supp ((xyzSystem k).f
+    (FreeMonoid.of XYZ.x * FreeMonoid.of XYZ.y * FreeMonoid.of XYZ.z)) := by
+  have hxy : (FreeMonoid.of XYZ.x ^ 3 : FreeMonoid XYZ) ≠ FreeMonoid.of XYZ.y ^ 3 := by
+    intro h
+    have := congrArg FreeMonoid.toList h
+    simp [pow_succ] at this
+  have hxz : (FreeMonoid.of XYZ.x ^ 3 : FreeMonoid XYZ) ≠ FreeMonoid.of XYZ.z ^ 3 := by
+    intro h
+    have := congrArg FreeMonoid.toList h
+    simp [pow_succ] at this
+  have hyz : (FreeMonoid.of XYZ.y ^ 3 : FreeMonoid XYZ) ≠ FreeMonoid.of XYZ.z ^ 3 := by
+    intro h
+    have := congrArg FreeMonoid.toList h
+    simp [pow_succ] at this
+  cases a <;> simp [supp, xyzSystem, mono, hxy, hxz, hyz, Ne.symm hxy, Ne.symm hxz, Ne.symm hyz]
+
 /-- **§2.2.** No total order makes `xyz ↦ x³ + y³ + z³` a Gröbner basis: for a total
 multiplicative order, `xyz < max(x³, y³, z³)`. -/
 theorem xyzSystem_not_isGroebner : ¬ (xyzSystem k).IsGroebner := by
-  sorry
+  rintro ⟨le, h, ht⟩
+  haveI := h.isPartialOrder
+  have hmul : ∀ u v a b, le u v → le (a * u * b) (a * v * b) := by
+    intro u v a b huv
+    by_cases he : u = v
+    · subst v; exact Std.Refl.refl _
+    · exact (h.mul u v a b ⟨huv, he⟩).1
+  have hmax : ∃ m : FreeMonoid XYZ, le (FreeMonoid.of XYZ.x) m ∧
+      le (FreeMonoid.of XYZ.y) m ∧ le (FreeMonoid.of XYZ.z) m ∧
+      (m = FreeMonoid.of XYZ.x ∨ m = FreeMonoid.of XYZ.y ∨ m = FreeMonoid.of XYZ.z) := by
+    rcases ht (FreeMonoid.of XYZ.x) (FreeMonoid.of XYZ.y) with hxy | hyx
+    · rcases ht (FreeMonoid.of XYZ.y) (FreeMonoid.of XYZ.z) with hyz | hzy
+      · exact ⟨_, IsTrans.trans _ _ _ hxy hyz, hyz, Std.Refl.refl _, Or.inr (Or.inr rfl)⟩
+      · exact ⟨_, hxy, Std.Refl.refl _, hzy, Or.inr (Or.inl rfl)⟩
+    · rcases ht (FreeMonoid.of XYZ.x) (FreeMonoid.of XYZ.z) with hxz | hzx
+      · exact ⟨_, hxz, IsTrans.trans _ _ _ hyx hxz, Std.Refl.refl _, Or.inr (Or.inr rfl)⟩
+      · exact ⟨_, Std.Refl.refl _, hyx, hzx, Or.inl rfl⟩
+  obtain ⟨m, hx, hy, hz, hm⟩ := hmax
+  have hbound : le (FreeMonoid.of XYZ.x * FreeMonoid.of XYZ.y * FreeMonoid.of XYZ.z) (m ^ 3) := by
+    have h₁ := hmul _ _ 1 (FreeMonoid.of XYZ.y * FreeMonoid.of XYZ.z) hx
+    have h₂ := hmul _ _ m (FreeMonoid.of XYZ.z) hy
+    have h₃ := hmul _ _ (m * m) 1 hz
+    simp only [one_mul, mul_one, ← mul_assoc] at h₁ h₃
+    simpa only [pow_succ, pow_zero, one_mul] using
+      IsTrans.trans _ _ _ h₁ (IsTrans.trans _ _ _ h₂ h₃)
+  have hsupp : m ^ 3 ∈ supp ((xyzSystem k).f
+      (FreeMonoid.of XYZ.x * FreeMonoid.of XYZ.y * FreeMonoid.of XYZ.z)) := by
+    rcases hm with rfl | rfl | rfl <;> exact xyzSystem_cube_mem_supp k _
+  have hc := h.compat _ (Set.mem_singleton _) _ hsupp
+  exact hc.2 (Std.Antisymm.antisymm _ _ hc.1 hbound)
 
 end Example
 

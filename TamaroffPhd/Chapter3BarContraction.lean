@@ -5,7 +5,8 @@ import TamaroffPhd.PreliminariesAnickChains
 
 The homotopy retract `Tor_A ⇄ B A` of §3.1.1, from which the thesis obtains the A∞-coalgebra
 structure on `Tor_A` (Theorem 3.2.1) and the minimal model (Theorem 3.2.6) by homotopy
-transfer. This is the *outline* pass: definitions and statements, proofs `sorry`.
+transfer. The straightening terms are proved non-attached, giving the side conditions
+`p h = 0` and `h h = 0`; the homotopy identity and exchange rule remain open.
 
 ## Contents
 
@@ -372,7 +373,42 @@ theorem straighten_not_attached (fuel lo : ℕ) (us : List (List X))
     (hus : (MonomialData.ofRelations W).IsBarTerm us) :
     ∀ g ∈ ((MonomialData.ofRelations W).straighten fuel lo us).1,
       ¬ (MonomialData.ofRelations W).IsAttached g.2 := by
-  sorry
+  induction fuel generalizing lo us with
+  | zero => simp [MonomialData.straighten]
+  | succ fuel ih =>
+    intro g hg
+    cases hs : (MonomialData.ofRelations W).lastSplit lo us with
+    | none => simp [MonomialData.straighten, hs] at hg
+    | some split =>
+      obtain ⟨i, a, b⟩ := split
+      have hsp := splits_of_lastSplit (MonomialData.ofRelations W) hs
+      have hi : i < us.length := by
+        by_contra hc
+        have he := hsp.1
+        rw [List.getElem?_eq_none (by omega)] at he
+        contradiction
+      have hab : us[i] = a ++ b := by
+        have he := hsp.1
+        rw [List.getElem?_eq_getElem hi] at he
+        exact Option.some.inj he
+      have hnot := not_isAttached_stepTerms (MonomialData.ofRelations W) hi hab
+        (hus _ (by rw [← hab]; exact List.getElem_mem hi)).2
+      cases ht : ((MonomialData.ofRelations W).stepTerms us i a b).2 with
+      | none =>
+        have he : (MonomialData.ofRelations W).stepTerms us i a b =
+            (((-1) ^ (i + 1), us.take i ++ [a, b] ++ us.drop (i + 1)), none) :=
+          Prod.ext rfl ht
+        simp only [MonomialData.straighten, hs, he, List.mem_singleton] at hg
+        subst g
+        exact hnot
+      | some Γ =>
+        have he : (MonomialData.ofRelations W).stepTerms us i a b =
+            (((-1) ^ (i + 1), us.take i ++ [a, b] ++ us.drop (i + 1)), some Γ) :=
+          Prod.ext rfl ht
+        simp only [MonomialData.straighten, hs, he, List.mem_cons] at hg
+        rcases hg with rfl | hg
+        · exact hnot
+        · exact ih (i + 1) Γ (isBarTerm_stepTerms_gamma W hus hsp ht) g hg
 
 theorem barP_of_not_isAttached (us : List (List X))
     (h : ¬ (MonomialData.ofRelations W).IsAttached us) : barP k W (bar k us) = 0 := by
@@ -387,10 +423,38 @@ theorem barContraction_homotopy (hW : (MonomialData.ofRelations W).IsMinimal) :
     barDiff k W ∘ₗ barH k W + barH k W ∘ₗ barDiff k W = LinearMap.id - barP k W := by
   sorry
 
-/-- **§2.2.9 side conditions** `p h = 0`, `h h = 0`; not yet proved. -/
-theorem barContraction_side (hW : (MonomialData.ofRelations W).IsMinimal) :
+/-- A linear map vanishing on non-attached terms kills the homotopy, since each
+straightening term splits a normal word into two factors with nonzero product. Used for
+the side conditions of the contraction. -/
+theorem comp_barH_eq_zero (F : BarSpace k X →ₗ[k] BarSpace k X)
+    (hF : ∀ us, ¬ (MonomialData.ofRelations W).IsAttached us → F (bar k us) = 0) :
+    F ∘ₗ barH k W = 0 := by
+  apply Finsupp.lhom_ext
+  intro us c
+  have he : Finsupp.single us c = c • bar k us := by simp [bar]
+  rw [he]
+  simp only [map_smul, LinearMap.comp_apply, LinearMap.zero_apply]
+  apply congrArg (c • ·)
+  by_cases hus : (MonomialData.ofRelations W).IsBarTerm us
+  · by_cases hatt : (MonomialData.ofRelations W).IsAttached us
+    · rw [barH, barExtend_bar, ite_eq_left hus, ite_eq_left hatt]
+      have hterms := straighten_not_attached W us.length 0 us hus
+      generalize hr : ((MonomialData.ofRelations W).straighten us.length 0 us).1 = gs at *
+      clear hr
+      induction gs with
+      | nil => simp
+      | cons g gs ih =>
+        simp only [List.foldr_cons, map_add, map_smul]
+        rw [hF g.2 (hterms g (by simp)), ih (fun g hg => hterms g (by simp [hg]))]
+        simp
+    · rw [barH_of_not_isAttached k W us hatt, map_zero]
+  · rw [barH, barExtend_bar, ite_eq_right hus, map_zero]
+
+/-- **§2.2.9 side conditions** `p h = 0`, `h h = 0`. -/
+theorem barContraction_side (_hW : (MonomialData.ofRelations W).IsMinimal) :
     barP k W ∘ₗ barH k W = 0 ∧ barH k W ∘ₗ barH k W = 0 := by
-  sorry
+  exact ⟨comp_barH_eq_zero k W (barP k W) (barP_of_not_isAttached k W),
+    comp_barH_eq_zero k W (barH k W) (barH_of_not_isAttached k W)⟩
 
 /-- **§3.1.1 (contraction).** For `A = k⟨X⟩/(W)` with `W` minimal, `(i, p, h)` is a homotopy
 retract of `B A` onto `Tor_A`, written in terms of `e = i p`:
@@ -413,6 +477,41 @@ def mapLeft (f : BarSpace k X →ₗ[k] BarSpace k X) :
   Finsupp.linearCombination k fun ab =>
     (f (bar k ab.1)).sum fun c r => r • Finsupp.single (c, ab.2) 1
 
+/-- Evaluation on a pure tensor, used in Corollary 3.1.5. -/
+theorem mapLeft_single (f : BarSpace k X →ₗ[k] BarSpace k X) (us vs : List (List X)) :
+    mapLeft k f (Finsupp.single (us, vs) 1) =
+      Finsupp.lmapDomain k k (fun cs => (cs, vs)) (f (bar k us)) := by
+  simp [mapLeft, Finsupp.linearCombination_single, Finsupp.lmapDomain_apply,
+    Finsupp.mapDomain, Finsupp.smul_single, mul_one]
+
+/-- Acting on a fixed right tensor factor, used in Corollary 3.1.5. -/
+theorem mapLeft_lmapDomain (f : BarSpace k X →ₗ[k] BarSpace k X)
+    (vs : List (List X)) (x : BarSpace k X) :
+    mapLeft k f (Finsupp.lmapDomain k k (fun cs => (cs, vs)) x) =
+      Finsupp.lmapDomain k k (fun cs => (cs, vs)) (f x) := by
+  induction x using Finsupp.induction_linear with
+  | zero => simp
+  | add x y hx hy => simp only [map_add, hx, hy]
+  | single us c =>
+    have he : Finsupp.single us c = c • bar k us := by simp [bar]
+    rw [he]
+    simp only [map_smul]
+    congr 1
+    simp [mapLeft, bar, Finsupp.linearCombination_single, Finsupp.lmapDomain_apply,
+      Finsupp.mapDomain, Finsupp.smul_single, mul_one]
+
+/-- Tensoring on the right preserves composition, used in Corollary 3.1.5. -/
+theorem mapLeft_comp (f g : BarSpace k X →ₗ[k] BarSpace k X) :
+    mapLeft k f ∘ₗ mapLeft k g = mapLeft k (f ∘ₗ g) := by
+  apply Finsupp.lhom_ext
+  rintro ⟨us, vs⟩ c
+  have he : Finsupp.single (us, vs) c = c • Finsupp.single (us, vs) 1 := by simp
+  rw [he]
+  simp only [map_smul, LinearMap.comp_apply]
+  congr 1
+  rw [mapLeft_single, mapLeft_lmapDomain, mapLeft_single]
+  rfl
+
 /-- `Tor_A ⊗ B A` inside `B A ⊗ B A`: pairs whose left factor is a critical bar term. -/
 def torTensorBar : Submodule k (List (List X) × List (List X) →₀ k) :=
   Submodule.span k {t | ∃ us vs, (MonomialData.ofRelations W).IsCriticalBarTerm us ∧
@@ -430,7 +529,26 @@ theorem barDelta_barH_exchange (us : List (List X))
 theorem mapLeft_barH_barDelta_barH (us : List (List X))
     (hus : (MonomialData.ofRelations W).IsBarTerm us ∧ (MonomialData.ofRelations W).IsAttached us) :
     mapLeft k (barH k W) (barDelta k W (barH k W (bar k us))) = 0 := by
-  sorry
+  have hkill : ∀ x ∈ torTensorBar k W, mapLeft k (barH k W) x = 0 := by
+    intro x hx
+    induction hx using Submodule.span_induction with
+    | mem x hx =>
+      obtain ⟨us, vs, hus, rfl⟩ := hx
+      rw [mapLeft_single, barH_critical k W us hus, map_zero]
+    | zero => simp
+    | add x y _ _ hx hy => simp [hx, hy]
+    | smul c x _ hx => simp [hx]
+  have hsq : barH k W ∘ₗ barH k W = 0 :=
+    comp_barH_eq_zero k W (barH k W) (barH_of_not_isAttached k W)
+  have hleftsq : mapLeft k (barH k W) ∘ₗ mapLeft k (barH k W) = 0 := by
+    rw [mapLeft_comp, hsq]
+    ext x
+    simp [mapLeft]
+  have he := hkill _ (barDelta_barH_exchange k W us hus)
+  rw [map_sub] at he
+  have hz := LinearMap.congr_fun hleftsq (barDelta k W (bar k us))
+  simp only [LinearMap.comp_apply, LinearMap.zero_apply] at hz
+  rwa [hz, sub_zero] at he
 
 end Contraction
 

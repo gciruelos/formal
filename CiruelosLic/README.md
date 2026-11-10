@@ -23,7 +23,7 @@ into garbage-free derivations followed by garbage.
 
 <!-- BEGIN GENERATED: main -->
 
-| Result | Lean | `sorry`s it depends on | Status |
+| Result | Lean | Open `sorry` declarations | Status |
 |:---|:---|---:|:---|
 | Corollary 2.27 (Confluence) | `confluence` | 0 | **proved** |
 | Theorem 3.27 (distributive lattice) | `distRS.instDistribLattice` | 0 | **proved** |
@@ -31,9 +31,9 @@ into garbage-free derivations followed by garbage.
 | Lemma 4.19 (generalized cube lemma) | `generalized_cube_lemma` | 0 | **proved** |
 | Theorem 5.22 (Factorization) | `factorization` | 0 | **proved** |
 
-*`sorry`s it depends on* counts the other declarations of this project with an explicit
-`sorry` that the result reaches through its statement and proof. For a result whose own proof
-is still `sorry` this only covers its statement. A **proved** result uses only `propext`,
+*Open `sorry` declarations* counts distinct declarations in this project that contain `sorry`
+and are reached through the result's statement or proof, including the result itself when it
+contains `sorry`. A **proved** result uses only `propext`,
 `Classical.choice` and `Quot.sound`, unless other axioms are listed.
 
 <!-- END GENERATED: main -->
@@ -62,19 +62,19 @@ background result the thesis cites from Melliès, orthogonality of β-reduction
 
 <!-- BEGIN GENERATED: stats -->
 
-| Prefix | File | Lines | Statements | Defs | Types | `sorry`s | Max statement DAG (statement) | Max proof DAG (proof) | Theorems with `sorry` |
-|:---|:---|---:|---:|---:|---:|---:|:---|:---|:---|
-| **Chapter1** | [Preliminaries.lean](Chapter1Preliminaries.lean) | 1,887 | 110 | 39 | 8 | 0 | 292 (<code>LaxFunctor.mk.injEq</code>) | 4,209 (<code>ResidualSystem.completeDevelopment_unique</code>) | — |
-| **Chapter2Section1** | [Calculus.lean](Chapter2Section1Calculus.lean) | 1,068 | 63 | 29 | 11 | 0 | 193 (<code>DTerm.subst._unary.eq_def</code>) | 8,575 (<code>PSubst.inverse</code>) | — |
-| **Chapter2Section4** | [Properties.lean](Chapter2Section4Properties.lean) | 1,296 | 62 | 1 | 1 | 0 | 110 (<code>PSubst.correct</code>) | 5,124 (<code>PSubst.typing</code>) | — |
-| **Chapter3** | [ResidualTheory.lean](Chapter3ResidualTheory.lean) | 1,409 | 87 | 14 | 2 | 0 | 181 (<code>distRS.meetAux_names._proof_1_6</code>) | 5,658 (<code>DStep.creation_case</code>) | — |
-| **Chapter4Section1** | [SimulationExpansion.lean](Chapter4Section1SimulationExpansion.lean) | 1,533 | 88 | 16 | 8 | 0 | 129 (<code>cut_compose_root</code>) | 7,183 (<code>PSubst.compose_cut</code>) | — |
-| **Chapter4Section2** | [Simulation.lean](Chapter4Section2Simulation.lean) | 1,525 | 72 | 4 | 1 | 0 | 155 (<code>simRes.match_1.eq_6</code>) | 9,513 (<code>cube_trace</code>) | — |
-| **Chapter5Section1** | [Garbage.lean](Chapter5Section1Garbage.lean) | 1,344 | 64 | 10 | 0 | 0 | 128 (<code>order_preserved</code>) | 3,672 (<code>leftmost_least</code>) | — |
-| **Chapter5Section4** | [Factorization.lean](Chapter5Section4Factorization.lean) | 1,033 | 55 | 6 | 1 | 0 | 448 (<code>factorization</code>) | 4,026 (<code>groth_isLUB</code>) | — |
-| **PreliminariesLambdaOrthogonality** | [.lean](PreliminariesLambdaOrthogonality.lean) | 2,152 | 131 | 13 | 2 | 0 | 328 (<code>Marked.MT.resid.induct_unfolding</code>) | 16,888 (<code>Marked.MT.Cube_aux</code>) | — |
-| **CiruelosLic** | [.lean](../CiruelosLic.lean) | 33 | 0 | 0 | 0 | 0 | — | — | — |
-| **Total / maximum** | | **13,280** | **732** | **132** | **34** | **0** | **448** (<code>factorization</code>) | **16,888** (<code>Marked.MT.Cube_aux</code>) | |
+| Prefix | File | Lines | Statements | Defs | Types | `sorry`s | Max statement DAG (statement) | Max proof DAG (proof) | Most interesting result ([interestingness](https://arxiv.org/abs/2609.28603)) | Theorems with `sorry` |
+|:---|:---|---:|---:|---:|---:|---:|:---|:---|:---|:---|
+| **Chapter1** | [Preliminaries.lean](Chapter1Preliminaries.lean) | 1,887 | 110 | 39 | 8 | 0 | 292 (<code>LaxFunctor.mk.injEq</code>) | 4,209 (<code>ResidualSystem.completeDevelopment_unique</code>) | [<code>LTerm.betaStep_iff_beta</code>](Chapter1Preliminaries.lean#L1441) (135.71) | — |
+| **Chapter2Section1** | [Calculus.lean](Chapter2Section1Calculus.lean) | 1,068 | 63 | 29 | 11 | 0 | 193 (<code>DTerm.subst._unary.eq_def</code>) | 8,575 (<code>PSubst.inverse</code>) | [<code>Correct.var</code>](Chapter2Section1Calculus.lean#L570) (130.33) | — |
+| **Chapter2Section4** | [Properties.lean](Chapter2Section4Properties.lean) | 1,296 | 62 | 1 | 1 | 0 | 110 (<code>PSubst.correct</code>) | 5,124 (<code>PSubst.typing</code>) | [<code>DStep.subject_reduction</code>](Chapter2Section4Properties.lean#L490) (129.74) | — |
+| **Chapter3** | [ResidualTheory.lean](Chapter3ResidualTheory.lean) | 1,409 | 87 | 14 | 2 | 0 | 181 (<code>distRS.meetAux_names._proof_1_6</code>) | 5,658 (<code>DStep.creation_case</code>) | [<code>distRS.orthogonal_core</code>](Chapter3ResidualTheory.lean#L403) (755.67) | — |
+| **Chapter4Section1** | [SimulationExpansion.lean](Chapter4Section1SimulationExpansion.lean) | 1,533 | 88 | 16 | 8 | 0 | 129 (<code>cut_compose_root</code>) | 7,183 (<code>PSubst.compose_cut</code>) | [<code>HasType.of_shift</code>](Chapter4Section1SimulationExpansion.lean#L1205) (125.45) | — |
+| **Chapter4Section2** | [Simulation.lean](Chapter4Section2Simulation.lean) | 1,525 | 72 | 4 | 1 | 0 | 155 (<code>simRes.match_1.eq_6</code>) | 9,513 (<code>cube_trace</code>) | [<code>cube_trace</code>](Chapter4Section2Simulation.lean#L813) (104.54) | — |
+| **Chapter5Section1** | [Garbage.lean](Chapter5Section1Garbage.lean) | 1,344 | 64 | 10 | 0 | 0 | 128 (<code>order_preserved</code>) | 3,672 (<code>leftmost_least</code>) | [<code>garbage_duplicates_core</code>](Chapter5Section1Garbage.lean#L416) (52.94) | — |
+| **Chapter5Section4** | [Factorization.lean](Chapter5Section4Factorization.lean) | 1,033 | 55 | 6 | 1 | 0 | 448 (<code>factorization</code>) | 4,026 (<code>groth_isLUB</code>) | [<code>GF.finite</code>](Chapter5Section4Factorization.lean#L391) (48.60) | — |
+| **PreliminariesLambdaOrthogonality** | [.lean](PreliminariesLambdaOrthogonality.lean) | 2,152 | 131 | 13 | 2 | 0 | 328 (<code>Marked.MT.resid.induct_unfolding</code>) | 16,888 (<code>Marked.MT.Cube_aux</code>) | [<code>Marked.MT.Cube_aux</code>](PreliminariesLambdaOrthogonality.lean#L453) (375.29) | — |
+| **CiruelosLic** | [.lean](../CiruelosLic.lean) | 33 | 0 | 0 | 0 | 0 | — | — | — | — |
+| **Total / maximum** | | **13,280** | **732** | **132** | **34** | **0** | **448** (<code>factorization</code>) | **16,888** (<code>Marked.MT.Cube_aux</code>) | | |
 
 The shared **Prefix** is the chapter/section; append **File** to recover the filename. The root
 module appears last.
@@ -87,6 +87,8 @@ module appears last.
 - **Max statement DAG (statement)** is the size of the largest elaborated theorem type;
   **Max proof DAG (proof)** the largest theorem body (hash-consed expression DAG), each with
   the declaration's name. Both include compiler-generated theorems.
+- **Most interesting result** shows the highest proof DAG size divided by statement DAG size among
+  sorry-free user-written theorems in the file. The name links to the Lean statement.
 - **Theorems with `sorry`** lists declarations (of any kind) whose own term contains `sorryAx`.
 
 Generated by [`scripts/update_stats.py`](../scripts/update_stats.py).
