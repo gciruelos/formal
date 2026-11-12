@@ -8,4 +8,5 @@ import ScoccolaPhd.Chapter5Section1ChangeOfEnrichment
 import ScoccolaPhd.Chapter5Section2Flows
 import ScoccolaPhd.Chapter6Section1DissimilarityFiltrations
 import ScoccolaPhd.Chapter6Section5ClusteringDiagrams
+import ScoccolaPhd.Chapter6Section7PersistentSets
 import ScoccolaPhd.PreliminariesProjectiveChainComplexes

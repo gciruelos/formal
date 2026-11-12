@@ -13,8 +13,10 @@ The enriched Kleisli construction (Section 5.2.1) is given by data: the underlyi
 `Hom(x, T ε y)`, composition is `f ≫ T ε g ≫ μ`. The monad and enriched composition
 laws are proved.
 
-The weak-interleaving characterization and equality of distances are proved. The remaining
-flow and power constructions and metric consequences are stated below.
+The weak-interleaving characterization and equality of distances are proved. The flow induced
+by a weak power structure has the same interleavings and distance as the original category;
+Proposition 5.2.21 therefore reduces to the cited flow-completeness theorem (5.2.20), whose
+inverse-limit construction remains open. The remaining flow constructions are stated below.
 -/
 
 open CategoryTheory CategoryTheory.Limits
@@ -657,7 +659,11 @@ theorem exists_powered_of_strong (h : F.IsStrong) :
   ⟨F.kPowered h, fun ε x => rfl⟩
 
 /-- Proposition 5.2.11: a flow induces a canonical flow on the Kleisli category of `T 0`, with
-the same weak and strong interleavings (for `δ > 0`). -/
+the same weak and strong interleavings (for `δ > 0`).
+
+**Gap (missing hypothesis, Proposition 5.2.11).** Without a commutativity/compatibility
+assumption relating `T δ (μ_{0, δ})` and `μ_{δ, 0}`, backward transfer of strong interleavings
+from `Kleisli F.monad` to `C` can fail (for example, for a non-commutative writer monad). -/
 theorem exists_flow_kleisli :
     ∃ F' : Flow (Kleisli F.monad),
       (∀ (ε : ℝ≥0) (x : Kleisli F.monad), (F'.T.obj ε).obj x = Kleisli.mk _ ((F.T.obj ε).obj x.of)) ∧
@@ -802,7 +808,11 @@ theorem complete_of_geometric_interleavings
     _ = r := ENNReal.add_halves r
 
 /-- Theorem 5.2.20 ([Cru19, Theorem 4]): if `C` has sequential limits preserved by every `T ε`,
-the interleaving distance of `(C, T)` is complete (no strength assumption). -/
+the interleaving distance of `(C, T)` is complete (no strength assumption).
+
+**Gap (missing hypothesis, Theorem 5.2.20).** Without `F.IsStrong`, `limit D` need not be a
+limit of the geometric interleaving sequence (counterexample: `C = Type`, `T 0 X = X`,
+`T ε X = X × Fin 2` for `ε > 0`, `a k = Unit`). -/
 theorem interleavingDist_complete [HasLimitsOfShape ℕᵒᵖ C]
     (hT : ∀ ε, PreservesLimitsOfShape ℕᵒᵖ (F.T.obj ε)) :
     IsCompleteDist F.interleavingDist := by
@@ -1194,12 +1204,112 @@ theorem exists_semiStrongFlow_of_weakPower (C : Type u) [Category.{v} C] [LPCat 
   have : ∀ X : C, IsIso (powFlow.u.app X) := fun X => isIso_powU X
   exact NatIso.isIso_of_isIso_app _
 
-/-- Proposition 5.2.21: if `C` has a weak power structure, sequential limits in `C₀`, and the
-weak powers preserve sequential limits, then `d_I` is complete. -/
+open WeakPowerStructure in
+/-- Transposition carries the induced flow's composition to the original approximate
+composition; used in Proposition 5.2.21. -/
+theorem weakPower_tr_comp {C : Type u} [Category.{v} C] [LPCat C] [WeakPowerStructure C]
+    {x y z : C} (ε δ : ℝ≥0) (f : x ⟶ (pow ε).obj y) (g : y ⟶ (pow δ).obj z) :
+    tr (ε + δ) x z (f ≫ (pow ε).map g ≫ powMu ε δ z) =
+      S (le_of_eq (by simp)) (comp (tr δ y z g) (tr ε x y f)) := by
+  have hf := tr_comp_x ε f (𝟙 _)
+  have hg := tr_comp_x δ g (𝟙 _)
+  rw [Category.comp_id, tr_id] at hf hg
+  rw [tr_comp_x, tr_comp_x, tr_powMu, hf, hg]
+  simp only [comp_S_l, comp_S_r, S_trans]
+  rw [← LPCat.assoc (homZero ((pow ε).map g)), powEval_nat]
+  simp only [comp_S_l, comp_S_r, S_trans]
+  rw [assoc' (powEval ε y) (homZero g) (powEval δ z)]
+  simp only [comp_S_l, comp_S_r, S_trans]
+  rw [← LPCat.assoc (homZero f) (powEval ε y)]
+  simp only [comp_S_l, comp_S_r, S_trans]
+
+open WeakPowerStructure in
+/-- Weak powers identify ordinary morphisms into `pow ε y` with approximate morphisms. -/
+noncomputable def weakPowerHomEquiv {C : Type u} [Category.{v} C] [LPCat C]
+    [WeakPowerStructure C] (ε : ℝ≥0) (x y : C) :
+    (x ⟶ (pow ε).obj y) ≃ hom x y ε where
+  toFun f := S (le_of_eq (add_zero ε)) (tr ε x y f)
+  invFun f := (tr ε x y).symm (S (le_of_eq (add_zero ε).symm) f)
+  left_inv f := by
+    apply (tr ε x y).injective
+    simp only [Equiv.apply_symm_apply, S_trans, S_refl]
+  right_inv f := by
+    simp only [Equiv.apply_symm_apply, S_trans, S_refl]
+
+open WeakPowerStructure in
+/-- Composition compatibility for the weak-power comparison in Proposition 5.2.21. -/
+private theorem weakPowerHomEquiv_comp {C : Type u} [Category.{v} C] [LPCat C]
+    [WeakPowerStructure C] {x y z : C} (ε δ : ℝ≥0)
+    (f : x ⟶ (pow ε).obj y) (g : y ⟶ (pow δ).obj z) :
+    weakPowerHomEquiv (ε + δ) x z (f ≫ (pow ε).map g ≫ powMu ε δ z) =
+      comp (weakPowerHomEquiv δ y z g) (weakPowerHomEquiv ε x y f) := by
+  change S _ (tr _ _ _ _) = comp (S _ _) (S _ _)
+  rw [weakPower_tr_comp, comp_S]
+  simp only [S_trans]
+
+open WeakPowerStructure in
+/-- Identity compatibility for the weak-power comparison in Proposition 5.2.21. -/
+private theorem weakPowerHomEquiv_eta {C : Type u} [Category.{v} C] [LPCat C]
+    [WeakPowerStructure C] (δ : ℝ≥0) (x : C) :
+    weakPowerHomEquiv δ x x (powU x ≫ powMap (zero_le : 0 ≤ δ) x) = S zero_le (idHom x) := by
+  change S _ (tr _ _ _ _) = _
+  rw [tr_comp_powMap, tr_powU]
+  simp only [S_trans]
+
+open WeakPowerStructure in
+/-- The induced flow and the original locally persistent category have the same
+interleaving pairs, as used in the proof of Proposition 5.2.21. -/
+theorem powFlow_pair_iff {C : Type u} [Category.{v} C] [LPCat C] [WeakPowerStructure C]
+    {x y : C} {δ : ℝ≥0} (f : x ⟶ (pow δ).obj y) (g : y ⟶ (pow δ).obj x) :
+    (powFlow : Flow C).IsWeakInterleaving f g ↔
+      IsInterleavingPair (weakPowerHomEquiv δ x y f) (weakPowerHomEquiv δ y x g) := by
+  change (f ≫ (pow δ).map g ≫ powMu δ δ x = powU x ≫ powMap zero_le x ∧
+    g ≫ (pow δ).map f ≫ powMu δ δ y = powU y ≫ powMap zero_le y) ↔ _
+  constructor
+  · intro h
+    constructor
+    · have h' := congrArg (weakPowerHomEquiv (δ + δ) x x) h.1
+      rwa [weakPowerHomEquiv_comp, weakPowerHomEquiv_eta] at h'
+    · have h' := congrArg (weakPowerHomEquiv (δ + δ) y y) h.2
+      rwa [weakPowerHomEquiv_comp, weakPowerHomEquiv_eta] at h'
+  · intro h
+    constructor
+    · apply (weakPowerHomEquiv (δ + δ) x x).injective
+      rw [weakPowerHomEquiv_comp, weakPowerHomEquiv_eta]
+      exact h.1
+    · apply (weakPowerHomEquiv (δ + δ) y y).injective
+      rw [weakPowerHomEquiv_comp, weakPowerHomEquiv_eta]
+      exact h.2
+
+/-- The weak-power flow gives the same interleavings as the original category
+(Proposition 5.2.6, used in Proposition 5.2.21). -/
+theorem powFlow_interleaved_iff {C : Type u} [Category.{v} C] [LPCat C] [WeakPowerStructure C]
+    (x y : C) (δ : ℝ≥0) :
+    (powFlow : Flow C).IsWeaklyInterleaved x y δ ↔ IsInterleaved x y δ := by
+  constructor
+  · rintro ⟨f, g, h⟩
+    exact ⟨⟨weakPowerHomEquiv δ x y f, weakPowerHomEquiv δ y x g, (powFlow_pair_iff f g).mp h⟩⟩
+  · rintro ⟨⟨f, g, h⟩⟩
+    refine ⟨(weakPowerHomEquiv δ x y).symm f, (weakPowerHomEquiv δ y x).symm g, ?_⟩
+    apply (powFlow_pair_iff _ _).mpr
+    simpa only [Equiv.apply_symm_apply] using h
+
+/-- Equality of the interleaving distances in Proposition 5.2.21. -/
+theorem powFlow_interleavingDist {C : Type u} [Category.{v} C] [LPCat C] [WeakPowerStructure C]
+    (x y : C) : (powFlow : Flow C).interleavingDist x y = interleavingDist x y := by
+  unfold Flow.interleavingDist interleavingDist
+  simp only [powFlow_interleaved_iff]
+
+/-- **Proposition 5.2.21.** If `C` has a weak power structure, sequential limits in `C₀`, and
+weak powers preserving sequential limits, then `d_I` is complete. -/
 theorem interleavingDist_complete_of_weakPower (C : Type u) [Category.{v} C] [LPCat C]
     [W : WeakPowerStructure C] [HasLimitsOfShape ℕᵒᵖ C]
     (h : ∀ ε, PreservesLimitsOfShape ℕᵒᵖ (WeakPowerStructure.pow (C := C) ε)) :
     IsCompleteDist (interleavingDist (C := C)) := by
-  sorry
+  have hcomplete := (powFlow : Flow C).interleavingDist_complete h
+  have hd : (powFlow : Flow C).interleavingDist = interleavingDist (C := C) :=
+    funext fun x => funext fun y => powFlow_interleavingDist x y
+  rwa [hd] at hcomplete
+
 
 end ScoccolaPhd

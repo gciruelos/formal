@@ -2,13 +2,11 @@ import Mathlib
 import ScoccolaPhd.Chapter6Section1DissimilarityFiltrations
 
 /-!
-# §§6.5–6.9: kernel density, clustering, persistent sets, diagrams
+# §§6.5–6.6: kernel density and hierarchical clustering
 
 Contents:
 * Chapter 6.5: Stability of the kernel density filtration
 * Chapter 6.6: The correspondence-interleaving distance on hierarchical clusterings
-* Chapter 6.7: The interleaving distance on persistent sets
-* Chapter 6.8–6.9: Mémoli's `d_F`; persistence diagrams
 -/
 
 universe u v
@@ -151,47 +149,55 @@ instance : Category.{u} WDiss.{u} where
       simp only [add_zero] at hf hg ⊢
       exact hf.trans hg⟩
 
+/-- Definition 6.5.11: the locally bi-persistent structure on `wDiss`. -/
+def wDissLQPCat : LQPCat (ℝ≥0 × ℝ≥0) WDiss.{u} where
+  hom := fun X Y q => WDissHom X Y q.1 q.2
+  homZero := Equiv.refl _
+  comp := fun {X Y Z ε δ} g f => ⟨g.1 ∘ f.1, by
+    constructor
+    · intro x x'
+      calc
+        Z.d (g.1 (f.1 x)) (g.1 (f.1 x')) ≤ Y.d (f.1 x) (f.1 x') + δ.1 := g.2.1 _ _
+        _ ≤ (X.d x x' + ε.1) + δ.1 := add_le_add (f.2.1 _ _) le_rfl
+        _ = X.d x x' + ((ε + δ).1 : ℝ≥0∞) := by simp [ENNReal.coe_add, add_assoc]
+    · intro x r
+      calc
+        X.M x r ≤ Y.M (f.1 x) (r + ε.1) + ε.2 := f.2.2 _ _
+        _ ≤ (Z.M (g.1 (f.1 x)) ((r + ε.1) + δ.1) + δ.2) + ε.2 :=
+          add_le_add (g.2.2 _ _) le_rfl
+        _ = Z.M (g.1 (f.1 x)) (r + (ε + δ).1) + (ε + δ).2 := by
+          simp [add_assoc, add_comm, add_left_comm]⟩
+  S := fun {X Y ε δ} h f => ⟨f.1, by
+    constructor
+    · intro x x'
+      exact (f.2.1 x x').trans (add_le_add le_rfl (by exact_mod_cast h.1))
+    · intro x r
+      exact (f.2.2 x r).trans (add_le_add (Y.mono _ (add_le_add le_rfl h.1)) h.2)⟩
+  id_comp := fun _ => rfl
+  comp_id := fun _ => rfl
+  assoc := fun _ _ _ => rfl
+  S_refl := fun _ => rfl
+  S_trans := fun _ _ _ => rfl
+  comp_S := fun _ _ _ _ => rfl
+  homZero_comp := fun _ _ => rfl
+
 /-- Definition 6.5.11: `wDiss` is a locally bi-persistent category. -/
 theorem exists_wDiss_lqpcat :
     ∃ L : LQPCat (ℝ≥0 × ℝ≥0) WDiss.{u}, ∀ (X Y : WDiss.{u}) (ε δ : ℝ≥0),
-      L.hom X Y (ε, δ) = WDissHom X Y ε δ := by
-  let L : LQPCat (ℝ≥0 × ℝ≥0) WDiss.{u} :=
-    { hom := fun X Y q => WDissHom X Y q.1 q.2
-      homZero := Equiv.refl _
-      comp := fun {X Y Z ε δ} g f => ⟨g.1 ∘ f.1, by
-        constructor
-        · intro x x'
-          calc
-            Z.d (g.1 (f.1 x)) (g.1 (f.1 x')) ≤ Y.d (f.1 x) (f.1 x') + δ.1 := g.2.1 _ _
-            _ ≤ (X.d x x' + ε.1) + δ.1 := add_le_add (f.2.1 _ _) le_rfl
-            _ = X.d x x' + ((ε + δ).1 : ℝ≥0∞) := by simp [ENNReal.coe_add, add_assoc]
-        · intro x r
-          calc
-            X.M x r ≤ Y.M (f.1 x) (r + ε.1) + ε.2 := f.2.2 _ _
-            _ ≤ (Z.M (g.1 (f.1 x)) ((r + ε.1) + δ.1) + δ.2) + ε.2 :=
-              add_le_add (g.2.2 _ _) le_rfl
-            _ = Z.M (g.1 (f.1 x)) (r + (ε + δ).1) + (ε + δ).2 := by
-              simp [add_assoc, add_comm, add_left_comm]⟩
-      S := fun {X Y ε δ} h f => ⟨f.1, by
-        constructor
-        · intro x x'
-          exact (f.2.1 x x').trans (add_le_add le_rfl (by exact_mod_cast h.1))
-        · intro x r
-          exact (f.2.2 x r).trans (add_le_add (Y.mono _ (add_le_add le_rfl h.1)) h.2)⟩
-      id_comp := fun _ => rfl
-      comp_id := fun _ => rfl
-      assoc := fun _ _ _ => rfl
-      S_refl := fun _ => rfl
-      S_trans := fun _ _ _ => rfl
-      comp_S := fun _ _ _ _ => rfl
-      homZero_comp := fun _ _ => rfl }
-  exact ⟨L, fun _ _ _ _ => rfl⟩
+      L.hom X Y (ε, δ) = WDissHom X Y ε δ :=
+  ⟨wDissLQPCat, fun _ _ _ _ => rfl⟩
 
 /-- Definition 6.5.14: acyclic morphisms of weighted dissimilarity spaces: surjective, distance
 preserving and weight preserving. -/
 def acyclicWDiss : MorphismProperty WDiss.{u} :=
   fun X Y f => Function.Surjective f.1 ∧ (∀ x x', Y.d (f.1 x) (f.1 x') = X.d x x') ∧
     ∀ x r, X.M x r = Y.M (f.1 x) r
+
+instance : acyclicWDiss.{u}.IsMultiplicative where
+  id_mem _ := ⟨Function.surjective_id, fun _ _ => rfl, fun _ _ => rfl⟩
+  comp_mem _ _ hf hg := ⟨hg.1.comp hf.1,
+    fun x y => by dsimp [CategoryStruct.comp]; rw [hg.2.1, hf.2.1],
+    fun x r => by dsimp [CategoryStruct.comp]; rw [hf.2.2, hg.2.2]⟩
 
 /-- Lemma 6.5.15: the underlying category of `wDiss` has pullbacks, and acyclic morphisms are
 stable under pullback. -/
@@ -232,13 +238,216 @@ theorem wDiss_hasPullbacks : Limits.HasPullbacks WDiss.{u} := by
       (congrFun (congrArg Subtype.val hmY) x)
   exact Limits.hasPullbacks_of_hasLimit_cospan WDiss
 
+private def wDissPow (q : ℝ≥0 × ℝ≥0) : WDiss.{u} ⥤ WDiss.{u} where
+  obj Y :=
+    { carrier := Y.carrier
+      d := fun y y' => Y.d y y' - q.1
+      M := fun y s => Y.M y (s + q.1) + q.2
+      mono := fun y _ _ h => add_le_add (Y.mono _ (add_le_add h le_rfl)) le_rfl }
+  map {Y Y'} f := ⟨f.1, by
+    constructor
+    · intro y y'
+      simpa using tsub_le_tsub_right (by simpa using f.2.1 y y') (q.1 : ℝ≥0∞)
+    · intro y s
+      have h := f.2.2 y (s + q.1)
+      simp only [add_zero] at h ⊢
+      exact add_le_add h le_rfl⟩
+  map_id _ := rfl
+  map_comp _ _ := rfl
+
+private def wDissQPowered : QPoweredByRepresentables wDissLQPCat.{u} where
+  pow := wDissPow
+  powIso X Y q r :=
+    { toFun := fun u => ⟨u.1, by
+        constructor
+        · intro x x'
+          have h1 := u.2.1 x x'
+          dsimp [wDissPow] at h1
+          rw [tsub_le_iff_right] at h1
+          exact h1.trans (le_of_eq (by simp [ENNReal.coe_add, add_assoc, add_comm, add_left_comm]))
+        · intro x s
+          have h2 := u.2.2 x s
+          dsimp [wDissPow] at h2
+          exact h2.trans (le_of_eq (by simp [add_assoc, add_comm, add_left_comm]))⟩
+      invFun := fun v => ⟨v.1, by
+        constructor
+        · intro x x'
+          dsimp [wDissPow]
+          rw [tsub_le_iff_right]
+          exact (v.2.1 x x').trans (le_of_eq (by
+            simp [ENNReal.coe_add, add_assoc, add_comm, add_left_comm]))
+        · intro x s
+          dsimp [wDissPow]
+          exact (v.2.2 x s).trans (le_of_eq (by simp [add_assoc, add_comm, add_left_comm]))⟩
+      left_inv := fun _ => rfl
+      right_inv := fun _ => rfl }
+  powIso_S _ _ := rfl
+  powIso_x _ _ := rfl
+  powIso_y _ _ := rfl
+
+private theorem wDissPow_preservesPullbacks (q : ℝ≥0 × ℝ≥0) :
+    Limits.PreservesLimitsOfShape Limits.WalkingCospan (wDissPow.{u} q) := by
+  constructor
+  intro K
+  let X := K.obj Limits.WalkingCospan.left
+  let Y := K.obj Limits.WalkingCospan.right
+  let Z := K.obj Limits.WalkingCospan.one
+  let f : X ⟶ Z := K.map Limits.WalkingCospan.Hom.inl
+  let g : Y ⟶ Z := K.map Limits.WalkingCospan.Hom.inr
+  let P : WDiss.{u} :=
+    { carrier := {p : X.carrier × Y.carrier // f.1 p.1 = g.1 p.2}
+      d := fun p q' => max (X.d p.1.1 q'.1.1) (Y.d p.1.2 q'.1.2)
+      M := fun p r => min (X.M p.1.1 r) (Y.M p.1.2 r)
+      mono := fun p a b h => min_le_min (X.mono _ h) (Y.mono _ h) }
+  let pX : P ⟶ X := ⟨fun p => p.1.1, by constructor <;> intros <;> simp [P]⟩
+  let pY : P ⟶ Y := ⟨fun p => p.1.2, by constructor <;> intros <;> simp [P]⟩
+  let c : Limits.PullbackCone f g := Limits.PullbackCone.mk pX pY (by
+    apply Subtype.ext; funext p; exact p.2)
+  have hc : Limits.IsLimit c := Limits.PullbackCone.isLimitAux' c fun s => by
+    let l : s.pt ⟶ P := ⟨fun x => ⟨(s.fst.1 x, s.snd.1 x),
+      congrFun (congrArg Subtype.val s.condition) x⟩, by
+      constructor
+      · intro x y; simpa [P] using max_le (s.fst.2.1 x y) (s.snd.2.1 x y)
+      · intro x r; simpa [P] using le_min (s.fst.2.2 x r) (s.snd.2.2 x r)⟩
+    refine ⟨l, rfl, rfl, fun {m} hmX hmY => ?_⟩
+    apply Subtype.ext; funext x; apply Subtype.ext
+    exact Prod.ext (congrFun (congrArg Subtype.val hmX) x)
+      (congrFun (congrArg Subtype.val hmY) x)
+  haveI : Limits.PreservesLimit (Limits.cospan f g) (wDissPow q) := by
+    refine Limits.preservesLimit_of_preserves_limit_cone hc ?_
+    refine Limits.IsLimit.mk ?_ ?_ ?_
+    · intro s
+      refine ⟨fun x => ⟨((s.π.app Limits.WalkingCospan.left).1 x,
+          (s.π.app Limits.WalkingCospan.right).1 x), ?_⟩, ?_⟩
+      · have hL := congrFun (congrArg Subtype.val (s.w Limits.WalkingCospan.Hom.inl)) x
+        have hR := congrFun (congrArg Subtype.val (s.w Limits.WalkingCospan.Hom.inr)) x
+        exact hL.trans hR.symm
+      · constructor
+        · intro x y
+          have hx : X.d ((s.π.app Limits.WalkingCospan.left).1 x)
+              ((s.π.app Limits.WalkingCospan.left).1 y) - q.1 ≤ s.pt.d x y := by
+            simpa [wDissPow] using (s.π.app Limits.WalkingCospan.left).2.1 x y
+          have hy : Y.d ((s.π.app Limits.WalkingCospan.right).1 x)
+              ((s.π.app Limits.WalkingCospan.right).1 y) - q.1 ≤ s.pt.d x y := by
+            simpa [wDissPow] using (s.π.app Limits.WalkingCospan.right).2.1 x y
+          dsimp [wDissPow, P]
+          rw [add_zero, tsub_le_iff_right]
+          exact max_le (tsub_le_iff_right.mp hx) (tsub_le_iff_right.mp hy)
+        · intro x r
+          have hx : s.pt.M x r ≤ X.M ((s.π.app Limits.WalkingCospan.left).1 x) (r + q.1) + q.2 := by
+            simpa [wDissPow] using (s.π.app Limits.WalkingCospan.left).2.2 x r
+          have hy : s.pt.M x r ≤ Y.M ((s.π.app Limits.WalkingCospan.right).1 x) (r + q.1) + q.2 := by
+            simpa [wDissPow] using (s.π.app Limits.WalkingCospan.right).2.2 x r
+          dsimp [wDissPow, P]
+          rw [add_zero]
+          have hmin : ∀ a b c : ℝ≥0, min (a + c) (b + c) ≤ min a b + c := fun a b c => by
+            rcases le_total a b with h | h
+            · simp [min_eq_left h, min_eq_left (add_le_add h le_rfl)]
+            · simp [min_eq_right h, min_eq_right (add_le_add h le_rfl)]
+          exact (le_min (by simpa [add_assoc] using hx) (by simpa [add_assoc] using hy)).trans (hmin _ _ _)
+    · intro s j
+      rcases j with (_ | _ | _)
+      · apply Subtype.ext; funext x
+        have hL := congrFun (congrArg Subtype.val (s.w Limits.WalkingCospan.Hom.inl)) x
+        have hR := congrFun (congrArg Subtype.val (s.w Limits.WalkingCospan.Hom.inr)) x
+        have h1 := congrFun (congrArg Subtype.val (c.w Limits.WalkingCospan.Hom.inl))
+          (⟨((s.π.app Limits.WalkingCospan.left).1 x, (s.π.app Limits.WalkingCospan.right).1 x),
+            hL.trans hR.symm⟩ : P.carrier)
+        exact h1.symm.trans hL
+      · rfl
+      · rfl
+    · intro s m hm
+      apply Subtype.ext; funext x; apply Subtype.ext
+      exact Prod.ext
+        (congrFun (congrArg Subtype.val (hm Limits.WalkingCospan.left)) x)
+        (congrFun (congrArg Subtype.val (hm Limits.WalkingCospan.right)) x)
+  exact Limits.preservesLimit_of_iso_diagram (wDissPow q) (Limits.diagramIsoCospan K).symm
+
 /-- Lemma 6.5.17: acyclic morphisms of `wDiss` are stable under weighted pullback (for the
-locally persistent structure `L` obtained by change of enrichment along `(1, 1)`). -/
-theorem isStableUnderWeightedPullbacks_acyclicWDiss (LW : LQPCat (ℝ≥0 × ℝ≥0) WDiss.{u})
-    (hLW : ∀ (X Y : WDiss.{u}) (ε δ : ℝ≥0), LW.hom X Y (ε, δ) = WDissHom X Y ε δ)
-    (L : LPCat WDiss.{u}) (hL : IsChangeOfEnrichment (pairFamily (1, 1)) LW L) :
+locally persistent structure `L` obtained by change of enrichment along `(1, 1)`).
+
+**Change.** Specializes the locally bi-persistent structure from an arbitrary `LW` satisfying
+`hLW` to `wDissLQPCat`, so that `exists_powered_of_changeOfEnrichment` applies. -/
+theorem isStableUnderWeightedPullbacks_acyclicWDiss
+    (L : LPCat WDiss.{u}) (hL : IsChangeOfEnrichment (pairFamily (1, 1)) wDissLQPCat L) :
     @IsStableUnderWeightedPullbacks WDiss _ L acyclicWDiss := by
-  sorry
+  letI := L
+  haveI : Limits.HasPullbacks WDiss.{u} := wDiss_hasPullbacks
+  obtain ⟨P, hP⟩ := exists_powered_of_changeOfEnrichment (pairFamily (1, 1))
+    (pairFamily_additive (1, 1)) wDissLQPCat wDissQPowered L hL
+  letI : PoweredByRepresentables WDiss.{u} := P
+  have hpres : ∀ ε, Limits.PreservesLimitsOfShape Limits.WalkingCospan
+      (PoweredByRepresentables.pow (C := WDiss.{u}) ε) := by
+    intro ε
+    rw [hP ε]
+    exact wDissPow_preservesPullbacks _
+  haveI : acyclicWDiss.{u}.IsStableUnderBaseChange := by
+    refine ⟨fun {X Y P Z} {f g f' g'} hsq hg => ?_⟩
+    let P' : WDiss.{u} :=
+      { carrier := {p : X.carrier × Y.carrier // f.1 p.1 = g.1 p.2}
+        d := fun p q => max (X.d p.1.1 q.1.1) (Y.d p.1.2 q.1.2)
+        M := fun p r => min (X.M p.1.1 r) (Y.M p.1.2 r)
+        mono := fun p a b h => min_le_min (X.mono _ h) (Y.mono _ h) }
+    let pX : P' ⟶ X := ⟨fun p => p.1.1, by constructor <;> intros <;> simp [P']⟩
+    let pY : P' ⟶ Y := ⟨fun p => p.1.2, by constructor <;> intros <;> simp [P']⟩
+    let c' : Limits.PullbackCone g f := Limits.PullbackCone.mk pY pX (by
+      apply Subtype.ext; funext p; exact p.2.symm)
+    have hc' : Limits.IsLimit c' := Limits.PullbackCone.isLimitAux' c' fun s => by
+      let l : s.pt ⟶ P' := ⟨fun x => ⟨(s.snd.1 x, s.fst.1 x),
+        (congrFun (congrArg Subtype.val s.condition) x).symm⟩, by
+        constructor
+        · intro x y; simpa [P'] using max_le (s.snd.2.1 x y) (s.fst.2.1 x y)
+        · intro x r; simpa [P'] using le_min (s.snd.2.2 x r) (s.fst.2.2 x r)⟩
+      refine ⟨l, rfl, rfl, fun {m} hmY hmX => ?_⟩
+      apply Subtype.ext; funext x; apply Subtype.ext
+      exact Prod.ext (congrFun (congrArg Subtype.val hmX) x)
+        (congrFun (congrArg Subtype.val hmY) x)
+    let iso : P ≅ P' := hsq.isLimit.conePointUniqueUpToIso hc'
+    have hcomp : iso.hom ≫ pX = g' :=
+      hsq.isLimit.conePointUniqueUpToIso_hom_comp hc' Limits.WalkingCospan.right
+    have hiso : acyclicWDiss iso.hom := by
+      refine ⟨fun p' => ⟨iso.inv.1 p', congrFun (congrArg Subtype.val iso.inv_hom_id) p'⟩,
+        fun p q => le_antisymm ?_ ?_, fun p r => le_antisymm ?_ ?_⟩
+      · simpa using iso.hom.2.1 p q
+      · have h1 := iso.inv.2.1 (iso.hom.1 p) (iso.hom.1 q)
+        simp only [ENNReal.coe_zero, add_zero] at h1
+        have hp : iso.inv.1 (iso.hom.1 p) = p := congrFun (congrArg Subtype.val iso.hom_inv_id) p
+        have hq : iso.inv.1 (iso.hom.1 q) = q := congrFun (congrArg Subtype.val iso.hom_inv_id) q
+        rwa [hp, hq] at h1
+      · simpa using iso.hom.2.2 p r
+      · have h2 := iso.inv.2.2 (iso.hom.1 p) r
+        simp only [add_zero] at h2
+        have hp : iso.inv.1 (iso.hom.1 p) = p := congrFun (congrArg Subtype.val iso.hom_inv_id) p
+        rwa [hp] at h2
+    have hpX : acyclicWDiss pX := by
+      refine ⟨fun x => ?_, fun p q => ?_, fun p r => ?_⟩
+      · obtain ⟨y, hy⟩ := hg.1 (f.1 x)
+        exact ⟨⟨(x, y), hy.symm⟩, rfl⟩
+      · dsimp [P', pX]
+        have hle : Y.d p.1.2 q.1.2 ≤ X.d p.1.1 q.1.1 := by
+          rw [← hg.2.1 p.1.2 q.1.2, ← p.2, ← q.2]
+          simpa using f.2.1 p.1.1 q.1.1
+        exact (max_eq_left hle).symm
+      · dsimp [P', pX]
+        have hle : X.M p.1.1 r ≤ Y.M p.1.2 r := by
+          rw [hg.2.2 p.1.2 r, ← p.2]
+          simpa using f.2.2 p.1.1 r
+        exact min_eq_left hle
+    rw [← hcomp]
+    exact ⟨hpX.1.comp hiso.1, fun a b => by
+      change X.d (pX.1 (iso.hom.1 a)) (pX.1 (iso.hom.1 b)) = P.d a b
+      rw [hpX.2.1, hiso.2.1],
+      fun a r => by
+      change P.M a r = X.M (pX.1 (iso.hom.1 a)) r
+      rw [hiso.2.2, hpX.2.2]⟩
+  refine @isStableUnderWeightedPullbacks_of_powered WDiss.{u} _ L acyclicWDiss.{u} P _
+    hpres _ (fun ε a b f hf => ?_)
+  rw [hP ε]
+  refine ⟨hf.1, fun y y' => ?_, fun y s => ?_⟩
+  · dsimp [wDissQPowered, wDissPow]
+    rw [hf.2.1 y y']
+  · dsimp [wDissQPowered, wDissPow]
+    rw [hf.2.2 y (s + ((pairFamily (1, 1)).toFun ε).1)]
 
 /-- Definition 6.5.18: `Y` is bounded with constant `B`. -/
 def WDiss.IsBoundedBy (Y : WDiss.{u}) (B : ℝ≥0) : Prop := ∀ y r, Y.M y r ≤ B
@@ -322,14 +531,237 @@ theorem kdf_uniformContinuous (K : Kernel) (B : ℝ≥0) [LPCat WDiss.{u}]
   sorry
 
 /-- Theorem 6.5.23: for compact metric probability spaces,
-`(d_I^{wDiss_{(1,1)}})/≃ (X, Y) ≤ 2 d_GHP (X, Y)`. -/
+`(d_I^{wDiss_{(1,1)}})/≃ (X, Y) ≤ 2 d_GHP (X, Y)`.
+
+**Change.** Specializes `LW` to `wDissLQPCat` (as in `isStableUnderWeightedPullbacks_acyclicWDiss`)
+so `IsChangeOfEnrichment` determines composition and units. -/
 theorem quotientInterleavingDist_wDiss_le_ghp (L : LPCat WDiss.{u})
-    (LW : LQPCat (ℝ≥0 × ℝ≥0) WDiss.{u})
-    (hLW : ∀ (X Y : WDiss.{u}) (ε δ : ℝ≥0), LW.hom X Y (ε, δ) = WDissHom X Y ε δ)
-    (hL : IsChangeOfEnrichment (pairFamily (1, 1)) LW L)
+    (hL : IsChangeOfEnrichment (pairFamily (1, 1)) wDissLQPCat L)
     (X Y : CompactMPS.{u}) :
     @quotientInterleavingDist WDiss _ L acyclicWDiss X.toWDiss Y.toWDiss ≤ 2 * ghpDist X Y := by
-  sorry
+  letI := L
+  rw [quotientInterleavingDist_eq_inf_acyclicCover (isStableUnderWeightedPullbacks_acyclicWDiss L hL)]
+  rw [mul_comm, ← ENNReal.div_le_iff_le_mul (Or.inl (by norm_num)) (Or.inl (by norm_num))]
+  unfold ghpDist
+  refine le_iInf fun Z => le_iInf fun _ => le_iInf fun _ => le_iInf fun _ =>
+    le_iInf fun i => le_iInf fun j => le_iInf fun hi => le_iInf fun hj => ?_
+  rw [ENNReal.div_le_iff_le_mul (Or.inl (by norm_num)) (Or.inl (by norm_num)), mul_comm]
+  set M := max (Metric.hausdorffEDist (Set.range i) (Set.range j))
+    (levyProkhorovEDist (X.μ.map i) (Y.μ.map j))
+  by_cases hM : M = ⊤
+  · rw [hM, ENNReal.mul_top (by norm_num)]; exact le_top
+  have hInf : 2 * M = ⨅ (ε : ℝ≥0) (_ : M < ε), (2 * ε : ℝ≥0∞) := by
+    apply le_antisymm
+    · exact le_iInf₂ fun ε hε => by gcongr
+    · rw [← ENNReal.coe_toNNReal hM]
+      refine ENNReal.le_of_forall_pos_le_add fun η hη _ => ?_
+      have hδ : (2 : ℝ≥0∞) * (↑M.toNNReal + ↑(η / 3)) ≤ 2 * ↑M.toNNReal + ↑η := by
+        norm_cast; linarith
+      refine iInf₂_le_of_le (M.toNNReal + η / 3) (by
+        rw [← ENNReal.coe_toNNReal hM, ENNReal.coe_lt_coe]
+        exact lt_add_of_pos_right _ (by positivity)) hδ
+  rw [hInf]
+  refine le_iInf₂ fun ε hε => ?_
+  have hH : Metric.hausdorffEDist (Set.range i) (Set.range j) < ε :=
+    lt_of_le_of_lt (le_max_left _ _) hε
+  have hP : levyProkhorovEDist (X.μ.map i) (Y.μ.map j) < ε :=
+    lt_of_le_of_lt (le_max_right _ _) hε
+  let R : Set (X.carrier × Y.carrier) := {p | edist (i p.1) (j p.2) < ε}
+  let R_X : WDiss.{u} :=
+    { carrier := R
+      d := fun p q => edist p.1.1 q.1.1
+      M := fun p r => (X.μ (Metric.ball p.1.1 r)).toNNReal
+      mono := fun p a b h => ENNReal.toNNReal_mono (measure_ne_top _ _)
+        (measure_mono (Metric.ball_subset_ball h)) }
+  let R_Y : WDiss.{u} :=
+    { carrier := R
+      d := fun p q => edist p.1.2 q.1.2
+      M := fun p r => (Y.μ (Metric.ball p.1.2 r)).toNNReal
+      mono := fun p a b h => ENNReal.toNNReal_mono (measure_ne_top _ _)
+        (measure_mono (Metric.ball_subset_ball h)) }
+  let a : R_X ⟶ X.toWDiss := ⟨fun p => p.1.1, by constructor <;> intros <;> simp [R_X, CompactMPS.toWDiss]⟩
+  let b : R_Y ⟶ Y.toWDiss := ⟨fun p => p.1.2, by constructor <;> intros <;> simp [R_Y, CompactMPS.toWDiss]⟩
+  have ha : acyclicWDiss a := by
+    refine ⟨fun x => ?_, fun _ _ => rfl, fun _ _ => rfl⟩
+    obtain ⟨z, ⟨y, rfl⟩, hz⟩ := Metric.exists_edist_lt_of_hausdorffEDist_lt (Set.mem_range_self x) hH
+    exact ⟨⟨(x, y), hz⟩, rfl⟩
+  have hb : acyclicWDiss b := by
+    refine ⟨fun y => ?_, fun _ _ => rfl, fun _ _ => rfl⟩
+    have hH' : Metric.hausdorffEDist (Set.range j) (Set.range i) < ε := by
+      rwa [Metric.hausdorffEDist_comm]
+    obtain ⟨z, ⟨x, rfl⟩, hz⟩ := Metric.exists_edist_lt_of_hausdorffEDist_lt (Set.mem_range_self y) hH'
+    exact ⟨⟨(x, y), by change edist (i x) (j y) < ε; rwa [edist_comm]⟩, rfl⟩
+  have hI : @IsInterleaved WDiss _ L R_X R_Y (2 * ε) := by
+    obtain ⟨e, he0, hecomp, heS⟩ := hL
+    have hpair : (pairFamily (1, 1)).toFun (2 * ε) = (2 * ε, 2 * ε) := by
+      simp [pairFamily]
+    let hφ_w : WDissHom R_X R_Y (2 * ε) (2 * ε) := ⟨id, by
+      constructor
+      · intro p q
+        calc edist p.1.2 q.1.2
+            = edist (j p.1.2) (j q.1.2) := (hj.edist_eq _ _).symm
+          _ ≤ edist (j p.1.2) (i p.1.1) + edist (i p.1.1) (i q.1.1) + edist (i q.1.1) (j q.1.2) :=
+              edist_triangle4 _ _ _ _
+          _ ≤ ε + edist p.1.1 q.1.1 + ε := by
+              refine add_le_add (add_le_add ?_ (hi.edist_eq _ _).le) q.2.le
+              rw [edist_comm]; exact p.2.le
+          _ = edist p.1.1 q.1.1 + ((2 * ε : ℝ≥0) : ℝ≥0∞) := by
+              push_cast; ring
+      · intro p r
+        by_cases hr : (r : ℝ) ≤ 0
+        · have hr0 : r = 0 := NNReal.eq (le_antisymm hr r.coe_nonneg)
+          simp [R_X, hr0]
+        · have hr_pos : 0 < (r : ℝ) := lt_of_not_ge hr
+          have hball_mble : MeasurableSet (Metric.ball (i p.1.1) (r : ℝ)) :=
+            Metric.isOpen_ball.measurableSet
+          have hpre_i : i ⁻¹' Metric.ball (i p.1.1) (r : ℝ) = Metric.ball p.1.1 (r : ℝ) := by
+            ext x; simp [Metric.mem_ball, hi.dist_eq]
+          have hpre_j : j ⁻¹' Metric.ball (j p.1.2) ((r + 2 * ε : ℝ≥0) : ℝ) =
+              Metric.ball p.1.2 ((r + 2 * ε : ℝ≥0) : ℝ) := by
+            ext y; simp [Metric.mem_ball, hj.dist_eq]
+          have hmap_i : X.μ (Metric.ball p.1.1 (r : ℝ)) =
+              (X.μ.map i) (Metric.ball (i p.1.1) (r : ℝ)) := by
+            rw [Measure.map_apply hi.continuous.measurable hball_mble, hpre_i]
+          have hmap_j : Y.μ (Metric.ball p.1.2 ((r + 2 * ε : ℝ≥0) : ℝ)) =
+              (Y.μ.map j) (Metric.ball (j p.1.2) ((r + 2 * ε : ℝ≥0) : ℝ)) := by
+            rw [Measure.map_apply hj.continuous.measurable Metric.isOpen_ball.measurableSet, hpre_j]
+          have hsub : Metric.thickening (ε : ℝ≥0∞).toReal (Metric.ball (i p.1.1) (r : ℝ)) ⊆
+              Metric.ball (j p.1.2) ((r + 2 * ε : ℝ≥0) : ℝ) := by
+            intro z hz
+            obtain ⟨w, hw_ball, hw_dist⟩ :=
+              (Metric.mem_thickening_iff_exists_edist_lt _ _).mp hz
+            have hw_lt : edist z w < ε := by
+              simpa [ENNReal.coe_toReal] using hw_dist
+            have hball_lt : edist w (i p.1.1) < r := by
+              rw [edist_dist, ← ENNReal.ofReal_coe_nnreal, ENNReal.ofReal_lt_ofReal_iff hr_pos]
+              exact hw_ball
+            have htri : edist z (j p.1.2) < ((r + 2 * ε : ℝ≥0) : ℝ≥0∞) := by
+              calc edist z (j p.1.2)
+                  ≤ edist z w + edist w (i p.1.1) + edist (i p.1.1) (j p.1.2) :=
+                    edist_triangle4 _ _ _ _
+                _ < ε + r + ε := ENNReal.add_lt_add (ENNReal.add_lt_add hw_lt hball_lt) p.2
+                _ = ((r + 2 * ε : ℝ≥0) : ℝ≥0∞) := by
+                    push_cast; ring
+            rw [Metric.mem_ball, dist_edist]
+            exact ENNReal.toReal_lt_of_lt_ofReal (by rw [ENNReal.ofReal_coe_nnreal]; exact htri)
+          have hmeas : X.μ (Metric.ball p.1.1 (r : ℝ)) ≤
+              Y.μ (Metric.ball p.1.2 ((r + 2 * ε : ℝ≥0) : ℝ)) + ((2 * ε : ℝ≥0) : ℝ≥0∞) := by
+            rw [hmap_i, hmap_j]
+            refine (left_measure_le_of_levyProkhorovEDist_lt hP hball_mble).trans ?_
+            exact add_le_add (measure_mono hsub) (ENNReal.coe_le_coe.mpr (by
+              rw [two_mul]; exact le_self_add))
+          have hnn := ENNReal.toNNReal_mono (ENNReal.add_ne_top.mpr ⟨measure_ne_top _ _, ENNReal.coe_ne_top⟩) hmeas
+          rw [ENNReal.toNNReal_add (measure_ne_top _ _) ENNReal.coe_ne_top, ENNReal.toNNReal_coe] at hnn
+          exact hnn⟩
+    let hψ_w : WDissHom R_Y R_X (2 * ε) (2 * ε) := ⟨id, by
+      constructor
+      · intro p q
+        calc edist p.1.1 q.1.1
+            = edist (i p.1.1) (i q.1.1) := (hi.edist_eq _ _).symm
+          _ ≤ edist (i p.1.1) (j p.1.2) + edist (j p.1.2) (j q.1.2) + edist (j q.1.2) (i q.1.1) :=
+              edist_triangle4 _ _ _ _
+          _ ≤ ε + edist p.1.2 q.1.2 + ε := by
+              refine add_le_add (add_le_add p.2.le (hj.edist_eq _ _).le) ?_
+              rw [edist_comm]; exact q.2.le
+          _ = edist p.1.2 q.1.2 + ((2 * ε : ℝ≥0) : ℝ≥0∞) := by
+              push_cast; ring
+      · intro p r
+        by_cases hr : (r : ℝ) ≤ 0
+        · have hr0 : r = 0 := NNReal.eq (le_antisymm hr r.coe_nonneg)
+          simp [R_Y, hr0]
+        · have hr_pos : 0 < (r : ℝ) := lt_of_not_ge hr
+          have hball_mble : MeasurableSet (Metric.ball (j p.1.2) (r : ℝ)) :=
+            Metric.isOpen_ball.measurableSet
+          have hpre_j : j ⁻¹' Metric.ball (j p.1.2) (r : ℝ) = Metric.ball p.1.2 (r : ℝ) := by
+            ext y; simp [Metric.mem_ball, hj.dist_eq]
+          have hpre_i : i ⁻¹' Metric.ball (i p.1.1) ((r + 2 * ε : ℝ≥0) : ℝ) =
+              Metric.ball p.1.1 ((r + 2 * ε : ℝ≥0) : ℝ) := by
+            ext x; simp [Metric.mem_ball, hi.dist_eq]
+          have hmap_j : Y.μ (Metric.ball p.1.2 (r : ℝ)) =
+              (Y.μ.map j) (Metric.ball (j p.1.2) (r : ℝ)) := by
+            rw [Measure.map_apply hj.continuous.measurable hball_mble, hpre_j]
+          have hmap_i : X.μ (Metric.ball p.1.1 ((r + 2 * ε : ℝ≥0) : ℝ)) =
+              (X.μ.map i) (Metric.ball (i p.1.1) ((r + 2 * ε : ℝ≥0) : ℝ)) := by
+            rw [Measure.map_apply hi.continuous.measurable Metric.isOpen_ball.measurableSet, hpre_i]
+          have hsub : Metric.thickening (ε : ℝ≥0∞).toReal (Metric.ball (j p.1.2) (r : ℝ)) ⊆
+              Metric.ball (i p.1.1) ((r + 2 * ε : ℝ≥0) : ℝ) := by
+            intro z hz
+            obtain ⟨w, hw_ball, hw_dist⟩ :=
+              (Metric.mem_thickening_iff_exists_edist_lt _ _).mp hz
+            have hw_lt : edist z w < ε := by
+              simpa [ENNReal.coe_toReal] using hw_dist
+            have hball_lt : edist w (j p.1.2) < r := by
+              rw [edist_dist, ← ENNReal.ofReal_coe_nnreal, ENNReal.ofReal_lt_ofReal_iff hr_pos]
+              exact hw_ball
+            have htri : edist z (i p.1.1) < ((r + 2 * ε : ℝ≥0) : ℝ≥0∞) := by
+              calc edist z (i p.1.1)
+                  ≤ edist z w + edist w (j p.1.2) + edist (j p.1.2) (i p.1.1) :=
+                    edist_triangle4 _ _ _ _
+                _ < ε + r + ε := ENNReal.add_lt_add (ENNReal.add_lt_add hw_lt hball_lt)
+                    (by rw [edist_comm]; exact p.2)
+                _ = ((r + 2 * ε : ℝ≥0) : ℝ≥0∞) := by
+                    push_cast; ring
+            rw [Metric.mem_ball, dist_edist]
+            exact ENNReal.toReal_lt_of_lt_ofReal (by rw [ENNReal.ofReal_coe_nnreal]; exact htri)
+          have hmeas : Y.μ (Metric.ball p.1.2 (r : ℝ)) ≤
+              X.μ (Metric.ball p.1.1 ((r + 2 * ε : ℝ≥0) : ℝ)) + ((2 * ε : ℝ≥0) : ℝ≥0∞) := by
+            rw [hmap_j, hmap_i]
+            refine (right_measure_le_of_levyProkhorovEDist_lt hP hball_mble).trans ?_
+            exact add_le_add (measure_mono hsub) (ENNReal.coe_le_coe.mpr (by
+              rw [two_mul]; exact le_self_add))
+          have hnn := ENNReal.toNNReal_mono (ENNReal.add_ne_top.mpr ⟨measure_ne_top _ _, ENNReal.coe_ne_top⟩) hmeas
+          rw [ENNReal.toNNReal_add (measure_ne_top _ _) ENNReal.coe_ne_top, ENNReal.toNNReal_coe] at hnn
+          exact hnn⟩
+    have hcast_id : ∀ (q : ℝ≥0 × ℝ≥0) (hq : (2 * ε, 2 * ε) = q) (a b : WDiss.{u})
+        (f : WDissHom a b (2 * ε) (2 * ε)) (g : a.carrier → b.carrier) (hf : f.1 = g),
+        (cast (congrArg (fun p : ℝ≥0 × ℝ≥0 => WDissHom a b p.1 p.2) hq) f).1 = g := by
+      rintro _ rfl _ _ f g hf; exact hf
+    have hcomp_val : ∀ {a b c : WDiss.{u}} {q₁ q₂ : ℝ≥0 × ℝ≥0}
+        (g : wDissLQPCat.hom b c q₂) (f : wDissLQPCat.hom a b q₁),
+        (wDissLQPCat.comp g f).1 = g.1 ∘ f.1 := fun _ _ => rfl
+    have hS_val : ∀ {a b : WDiss.{u}} {q₁ q₂ : ℝ≥0 × ℝ≥0} (h : q₁ ≤ q₂)
+        (f : wDissLQPCat.hom a b q₁), (wDissLQPCat.S h f).1 = f.1 := fun _ _ => rfl
+    let φ_q : wDissLQPCat.hom R_X R_Y ((pairFamily (1, 1)).toFun (2 * ε)) :=
+      cast (congrArg (fun q => WDissHom R_X R_Y q.1 q.2) hpair.symm) hφ_w
+    let ψ_q : wDissLQPCat.hom R_Y R_X ((pairFamily (1, 1)).toFun (2 * ε)) :=
+      cast (congrArg (fun q => WDissHom R_Y R_X q.1 q.2) hpair.symm) hψ_w
+    let φ : L.hom R_X R_Y (2 * ε) := cast (e R_X R_Y (2 * ε)).symm φ_q
+    let ψ : L.hom R_Y R_X (2 * ε) := cast (e R_Y R_X (2 * ε)).symm ψ_q
+    refine ⟨⟨φ, ψ, ?_, ?_⟩⟩
+    · apply (Equiv.cast (e R_X R_X (2 * ε + 2 * ε))).injective
+      simp only [Equiv.cast_apply, φ, ψ]
+      rw [hecomp]
+      have h_lhs : (wDissLQPCat.S ((pairFamily (1, 1)).superadd (2 * ε) (2 * ε))
+          (wDissLQPCat.comp (cast (e R_Y R_X (2 * ε)) (cast (e R_Y R_X (2 * ε)).symm ψ_q))
+            (cast (e R_X R_Y (2 * ε)) (cast (e R_X R_Y (2 * ε)).symm φ_q)))).1 = id := by
+        rw [cast_cast, cast_eq, cast_cast, cast_eq, hS_val, hcomp_val]
+        have h1 : ψ_q.1 = id := hcast_id _ hpair.symm R_Y R_X hψ_w id rfl
+        have h2 : φ_q.1 = id := hcast_id _ hpair.symm R_X R_Y hφ_w id rfl
+        rw [h1, h2]
+        rfl
+      have h_rhs : (cast (e R_X R_X (2 * ε + 2 * ε))
+          (L.S (bot_le : (0 : ℝ≥0) ≤ 2 * ε + 2 * ε) (L.homZero (𝟙 R_X)))).1 = id := by
+        rw [heS R_X R_X 0 (2 * ε + 2 * ε) bot_le (L.homZero (𝟙 R_X)), he0]
+        rfl
+      exact Subtype.ext (h_lhs.trans h_rhs.symm)
+    · apply (Equiv.cast (e R_Y R_Y (2 * ε + 2 * ε))).injective
+      simp only [Equiv.cast_apply, φ, ψ]
+      rw [hecomp]
+      have h_lhs : (wDissLQPCat.S ((pairFamily (1, 1)).superadd (2 * ε) (2 * ε))
+          (wDissLQPCat.comp (cast (e R_X R_Y (2 * ε)) (cast (e R_X R_Y (2 * ε)).symm φ_q))
+            (cast (e R_Y R_X (2 * ε)) (cast (e R_Y R_X (2 * ε)).symm ψ_q)))).1 = id := by
+        rw [cast_cast, cast_eq, cast_cast, cast_eq, hS_val, hcomp_val]
+        have h1 : φ_q.1 = id := hcast_id _ hpair.symm R_X R_Y hφ_w id rfl
+        have h2 : ψ_q.1 = id := hcast_id _ hpair.symm R_Y R_X hψ_w id rfl
+        rw [h1, h2]
+        rfl
+      have h_rhs : (cast (e R_Y R_Y (2 * ε + 2 * ε))
+          (L.S (bot_le : (0 : ℝ≥0) ≤ 2 * ε + 2 * ε) (L.homZero (𝟙 R_Y)))).1 = id := by
+        rw [heS R_Y R_Y 0 (2 * ε + 2 * ε) bot_le (L.homZero (𝟙 R_Y)), he0]
+        rfl
+      exact Subtype.ext (h_lhs.trans h_rhs.symm)
+  refine iInf₂_le_of_le (2 * ε) ⟨R_X, R_Y, a, b, ha, hb, hI⟩ ?_
+  push_cast; exact le_rfl
 
 end KernelDensity
 
@@ -343,7 +775,8 @@ category structure (its `0`-morphisms); its locally persistent structure is stat
 Omitted from 6.6.3: the comparison with the Carlsson–Mémoli distance on dendrograms and with
 the merge distortion metric of [EBW15] (merge functions, cluster trees).
 
-Statements only (with the definitions); all proofs are `sorry`. -/
+Density-clustering stability and the acyclic-morphism laws are proved. The structural
+lemma, completeness and the correspondence-distance comparison remain open. -/
 
 section Clustering
 
@@ -637,7 +1070,10 @@ theorem hCl_quotientInterleavingDist_spec {n : ℕ} (v : Fin n → Bool) (L : LP
       ⨅ (δ : ℝ≥0) (_ : ∃ (X' Y' : HCl.{u} v) (a : X' ⟶ X) (b : Y' ⟶ Y),
         acyclicHCl v a ∧ acyclicHCl v b ∧ @IsInterleaved _ _ L X' Y' δ), (δ : ℝ≥0∞) := by
   refine ⟨?_, ?_, ?_⟩
-  · sorry
+  · exact @quotientInterleavingDistOf_intrinsic _ _ L
+      (@admitsCoherentFactorizations_of_midpoints _ _ L
+        (hCl_structure v L hL).2.2.2.2.2.2.1) _
+      (weaklyEquivalent_equivalence _)
   · sorry
   · intro X Y
     exact @quotientInterleavingDist_eq_inf_acyclicCover _ _ L (acyclicHCl v) _
@@ -652,708 +1088,5 @@ theorem hCl_quotientInterleavingDist_eq {n : ℕ} (v : Fin n → Bool) (L : LPCa
   sorry
 
 end Clustering
-
-/-! ## Chapter 6.7: The interleaving distance on persistent sets
-
-`Set^ℝ` carries the locally persistent structure of persistent objects.  The full subcategory
-of right continuous, q-tame persistent sets is `RTSet`; its locally persistent structure is
-stated to exist.  Ultra metric spaces and their single-linkage persistent sets (Section 6.7.2)
-are defined concretely.
-
-Omitted: Proposition 6.7.4 (weighted sequential limits "of morphisms that are part of an
-interleaving"), Definition 6.7.8 (dendrograms) and the embedding of dendrograms.
-
-Statements only (with the definitions); all proofs are `sorry`. -/
-
-section PersistentSets
-
-open CategoryTheory CategoryTheory.Limits
-open scoped NNReal ENNReal
-
-open LPCat
-
-/-- Theorem 6.7.1: the interleaving distance on `Set^ℝ` is intrinsic and complete. -/
-theorem persistentSet_intrinsic_complete :
-    @IsIntrinsicDist (ℝ ⥤ Type u) (@interleavingDist (ℝ ⥤ Type u) _ (persistentLPCat (Type u))) ∧
-    @IsCompleteDist (ℝ ⥤ Type u) (@interleavingDist (ℝ ⥤ Type u) _ (persistentLPCat (Type u))) := by
-  exact ⟨persistent_intrinsic (Type u), (persistent_complete (Type u)).2⟩
-
-/-- The full subcategory `Set^ℝ_{righ,tame}` of right continuous and q-tame persistent sets. -/
-structure RTSet where
-  X : ℝ ⥤ Type u
-  rightContinuous : IsRightContinuous X
-  qtame : IsQTameSet X
-
-instance : Category.{u} RTSet.{u} where
-  Hom A B := A.X ⟶ B.X
-  id A := 𝟙 A.X
-  comp f g := f ≫ g
-
-/-- The locally persistent structure on `Set^ℝ_{righ,tame}`, induced from that of
-`Set^ℝ`: `Hom(A, B)_ε = Nat(A, B^ε)`. -/
-theorem exists_rtSet_lpcat :
-    ∃ L : LPCat RTSet.{u}, ∀ (A B : RTSet.{u}) (ε : ℝ≥0),
-      L.hom A B ε = (A.X ⟶ shift (ε : ℝ) B.X) := by
-  let P : LPCat (ℝ ⥤ Type u) := persistentLPCat (Type u)
-  let L : LPCat RTSet.{u} := {
-    hom := fun A B ε => P.hom A.X B.X ε
-    homZero := P.homZero
-    comp := P.comp
-    S := P.S
-    id_comp := P.id_comp
-    comp_id := P.comp_id
-    assoc := P.assoc
-    S_refl := P.S_refl
-    S_trans := P.S_trans
-    comp_S := P.comp_S
-    homZero_comp := P.homZero_comp
-  }
-  exact ⟨L, fun A B ε => rfl⟩
-
-/-- Proposition 6.7.3: `Set^ℝ_{righ,tame}` is copowered and powered by representables and has
-binary products, pullbacks and terminal midpoints. -/
-theorem rtSet_structure (L : LPCat RTSet.{u})
-    (hL : ∀ (A B : RTSet.{u}) (ε : ℝ≥0), L.hom A B ε = (A.X ⟶ shift (ε : ℝ) B.X)) :
-    Nonempty (@PoweredByRepresentables RTSet.{u} _ L) ∧
-    Nonempty (@CopoweredByRepresentables RTSet.{u} _ L) ∧ HasBinaryProducts RTSet.{u} ∧
-    HasPullbacks RTSet.{u} ∧ @HasTerminalMidpoints RTSet.{u} _ L := by
-  sorry
-
-/-- Theorem 6.7.5: the interleaving distance on right continuous, q-tame persistent sets is
-complete and geodesic, and persistent sets at distance zero are isomorphic. -/
-theorem rtSet_geodesic_complete (L : LPCat RTSet.{u})
-    (hL : ∀ (A B : RTSet.{u}) (ε : ℝ≥0), L.hom A B ε = (A.X ⟶ shift (ε : ℝ) B.X)) :
-    @IsGeodesicDist RTSet.{u} (@interleavingDist RTSet.{u} _ L) ∧
-    @IsCompleteDist RTSet.{u} (@interleavingDist RTSet.{u} _ L) ∧
-    ∀ A B : RTSet.{u}, @interleavingDist RTSet.{u} _ L A B = 0 → Nonempty (A ≅ B) := by
-  sorry
-
-/-! ### 6.7.2 Persistent sets and ultra metric spaces -/
-
-/-- Definition 6.7.9: an extended ultra metric space: an extended metric space (only equal
-points are at distance `0`) with the ultrametric inequality. -/
-structure UltraMet where
-  carrier : Type u
-  [metric : EMetricSpace carrier]
-  ultra : ∀ x y z : carrier, edist x z ≤ max (edist x y) (edist y z)
-
-attribute [instance] UltraMet.metric
-
-/-- The category of extended ultra metric spaces and distance non-increasing maps. -/
-instance : Category.{u} UltraMet.{u} where
-  Hom X Y := {f : X.carrier → Y.carrier // IsDistNonIncreasing f}
-  id X := ⟨id, fun _ _ => le_rfl⟩
-  comp f g := ⟨g.1 ∘ f.1, fun p p' => le_trans (g.2 _ _) (f.2 p p')⟩
-
-/-- The single-linkage equivalence relation `x ∼_r y ⟺ d x y ≤ r` of an ultra metric space. -/
-def UltraMet.slSetoid (X : UltraMet.{u}) (r : ℝ≥0) : Setoid X.carrier where
-  r x y := edist x y ≤ r
-  iseqv :=
-    ⟨fun x => by simp, fun h => by simpa [edist_comm] using h,
-      fun h h' => ((X.ultra _ _ _).trans (max_le h h'))⟩
-
-/-- The persistent set of single-linkage clusters of an ultrametric space. -/
-def UltraMet.singleLinkage (X : UltraMet.{u}) : ℝ≥0 ⥤ Type u where
-  obj r := Quotient (X.slSetoid r)
-  map {r s} h := TypeCat.ofHom (@Quotient.map _ _ (X.slSetoid r) (X.slSetoid s) id
-    (fun _ _ hxy => hxy.trans (ENNReal.coe_le_coe.mpr (leOfHom h))))
-  map_id := by intro r; ext q; induction q using Quotient.inductionOn with | _ x => rfl
-  map_comp := by intro r s t f g; ext q; induction q using Quotient.inductionOn with | _ x => rfl
-
-/-- Single linkage sends non-expanding maps to natural transformations. -/
-def singleLinkageFunctor : UltraMet.{u} ⥤ (ℝ≥0 ⥤ Type u) where
-  obj X := X.singleLinkage
-  map {X Y} f := {
-    app := fun r => TypeCat.ofHom (@Quotient.map _ _ (X.slSetoid r) (Y.slSetoid r) f.1
-      (fun _ _ h => (f.2 _ _).trans h))
-    naturality := by
-      intro r s h
-      ext q
-      induction q using Quotient.inductionOn with | _ x => rfl
-  }
-  map_id := by
-    intro X
-    ext r q
-    induction q using Quotient.inductionOn with | _ x => rfl
-  map_comp := by
-    intro X Y Z f g
-    ext r q
-    induction q using Quotient.inductionOn with | _ x => rfl
-
-/-- `X ∈ Set^{ℝ≥0}` is separated if `X r → lim_{r' > r} X r'` is injective. -/
-def IsSeparated (X : ℝ≥0 ⥤ Type u) : Prop :=
-  ∀ (r : ℝ≥0) (a b : X.obj r), (∀ r' (h : r < r'), X.map (homOfLE h.le) a = X.map (homOfLE h.le) b) →
-    a = b
-
-/-- `X ∈ Set^{ℝ≥0}` is flabby if all structure maps are surjective. -/
-def IsFlabby (X : ℝ≥0 ⥤ Type u) : Prop :=
-  ∀ (r s : ℝ≥0) (h : r ≤ s), Function.Surjective (X.map (homOfLE h))
-
-/-- Theorem 6.7.10 ([Ack13]): single linkage `X ↦ (r ↦ X/∼_r)` is an equivalence between
-extended ultra metric spaces and flabby, separated persistent sets; and `X` is complete iff
-`SL X` is right continuous. -/
-theorem singleLinkage_equivalence :
-    ∃ SL : UltraMet.{u} ⥤ (ℝ≥0 ⥤ Type u),
-      (∀ X r, (SL.obj X).obj r = Quotient (X.slSetoid r)) ∧ SL.Full ∧ SL.Faithful ∧
-      (∀ F : ℝ≥0 ⥤ Type u, (∃ X, Nonempty (SL.obj X ≅ F)) ↔ IsFlabby F ∧ IsSeparated F) ∧
-      (∀ X, IsCompleteEP X.carrier ↔ IsRightContinuous (SL.obj X)) := by
-  refine ⟨singleLinkageFunctor, (fun _ _ => rfl), ?_⟩
-  sorry
-
-/-- Theorem 6.7.11: under the correspondence of Theorem 6.7.10, an extended ultra metric space
-is totally bounded iff its single-linkage persistent set is q-tame, and compact iff q-tame and
-right continuous. -/
-theorem singleLinkage_compact (SL : UltraMet.{u} ⥤ (ℝ≥0 ⥤ Type u))
-    (hSL : ∀ X r, (SL.obj X).obj r = Quotient (X.slSetoid r))
-    (hSLmap : ∀ (X : UltraMet.{u}) (r s : ℝ≥0) (h : r ≤ s) (x : X.carrier),
-      (SL.obj X).map (homOfLE h) (cast (hSL X r).symm (Quotient.mk (X.slSetoid r) x)) =
-        cast (hSL X s).symm (Quotient.mk (X.slSetoid s) x))
-    (X : UltraMet.{u}) :
-    (IsTotallyBoundedEP X.carrier ↔ IsQTameSet (SL.obj X)) ∧
-    (IsCompactEP X.carrier ↔ IsQTameSet (SL.obj X) ∧ IsRightContinuous (SL.obj X)) := by
-  sorry
-
-end PersistentSets
-
-/-! ## Chapter 6.8–6.9: Mémoli's `d_F`; persistence diagrams
-
-6.8: finite filtered simplicial complexes `ffsCpx` form a locally persistent category (given
-here concretely).  Remark 6.8.9 (comparison with the homotopy interleaving distance through
-geometric realization) is omitted.
-
-6.9: persistence diagrams and the locally persistent categories `PD^p_q`.  The extended-real
-distance `|x - x'|` on `[-∞, ∞]` is taken to be `0` if `x = x'`, `∞` if exactly one is infinite
-(or they are opposite infinities) and the usual absolute value otherwise.
-
-The locally persistent structure of `ffsCpx` and the acyclic-cover formula are proved;
-the remaining constructions and comparisons are open. -/
-
-section SimplicialAndDiagrams
-
-open CategoryTheory CategoryTheory.Limits
-open scoped NNReal ENNReal
-
-open LPCat
-
-/-! ### 6.8 Mémoli's `d_F` distance -/
-
-/-- A finite filtered simplicial complex: a finite set with a function `F : P(X) → ℝ` respecting
-inclusions. -/
-structure FFSCpx where
-  carrier : Type
-  [fin : Fintype carrier]
-  F : Finset carrier → ℝ
-  mono : ∀ σ τ, σ ⊆ τ → F σ ≤ F τ
-
-attribute [instance] FFSCpx.fin
-
-open scoped Classical in
-/-- Morphisms of `ffsCpx` of degree `ε`: maps with `F_X σ ≤ F_Y (f σ) + ε` for all `σ`. -/
-def FFSCpxHom (X Y : FFSCpx) (ε : ℝ≥0) : Type :=
-  {f : X.carrier → Y.carrier // ∀ σ, X.F σ ≤ Y.F (σ.image f) + ε}
-
-open scoped Classical in
-/-- The underlying category of `ffsCpx`: the `0`-morphisms. -/
-instance : Category.{0} FFSCpx where
-  Hom X Y := FFSCpxHom X Y 0
-  id X := ⟨id, fun σ => by simp⟩
-  comp {X Y Z} f g := ⟨g.1 ∘ f.1, fun σ => by
-    have h1 := f.2 σ
-    have h2 := g.2 (σ.image f.1)
-    rw [Finset.image_image] at h2
-    simp only [NNReal.coe_zero, add_zero] at h1 h2 ⊢
-    exact h1.trans h2⟩
-
-open scoped Classical in
-/-- The locally persistent structure of `ffsCpx`: `Hom(X, Y)_ε = FFSCpxHom X Y ε`. -/
-noncomputable def ffsCpxLPCat : LPCat FFSCpx where
-  hom := FFSCpxHom
-  homZero := Equiv.refl _
-  comp := fun {X Y Z ε δ} g f => ⟨g.1 ∘ f.1, fun σ => by
-    have hf := f.2 σ
-    have hg := g.2 (σ.image f.1)
-    rw [Finset.image_image] at hg
-    push_cast
-    linarith⟩
-  S := fun {X Y ε δ} h f => ⟨f.1, fun σ =>
-    (f.2 σ).trans (add_le_add_right (NNReal.coe_le_coe.mpr h) _)⟩
-  id_comp := fun _ => rfl
-  comp_id := fun _ => rfl
-  assoc := fun _ _ _ => rfl
-  S_refl := fun _ => rfl
-  S_trans := fun _ _ _ => rfl
-  comp_S := fun _ _ _ _ => rfl
-  homZero_comp := fun _ _ => rfl
-
-/-- The locally persistent structure of `ffsCpx`: `Hom(X, Y)_ε = FFSCpxHom X Y ε`. -/
-theorem exists_ffsCpx_lpcat :
-    ∃ L : LPCat FFSCpx, ∀ (X Y : FFSCpx) (ε : ℝ≥0), L.hom X Y ε = FFSCpxHom X Y ε :=
-  ⟨ffsCpxLPCat, fun _ _ _ => rfl⟩
-
-open scoped Classical in
-/-- Acyclic morphisms of `ffsCpx`: surjective maps with `F_X σ = F_Y (f σ)`. -/
-def acyclicFFSCpx : MorphismProperty FFSCpx :=
-  fun X Y f => Function.Surjective f.1 ∧ ∀ σ, X.F σ = Y.F (σ.image f.1)
-
-open scoped Classical in
-/-- Mémoli's distance [Mé17]:
-`d_F (X, Y) = inf max_σ |f^* F_X (σ) - g^* F_Y (σ)|` over finite `Z` and surjections
-`f : Z → X`, `g : Z → Y`. -/
-noncomputable def ffsCpxDist (X Y : FFSCpx) : ℝ≥0∞ :=
-  ⨅ (Z : Type) (_ : Fintype Z) (f : Z → X.carrier) (g : Z → Y.carrier)
-    (_ : Function.Surjective f) (_ : Function.Surjective g),
-    ⨆ σ : Finset Z, ENNReal.ofReal |X.F (σ.image f) - Y.F (σ.image g)|
-
-section ffs
-
-variable (L : LPCat FFSCpx) (hL : L = ffsCpxLPCat)
-
-include hL
-
-open scoped Classical in
-/-- Lemma 6.8.1: `ffsCpx` is copowered and powered by representables (powers `F_{Y^ε} = F_Y + ε`,
-copowers `F_{ε·X} = F_X - ε`).
-
-**Note.** The hypothesis `hL` pins the locally persistent structure to
-the canonical `ffsCpxLPCat` of `exists_ffsCpx_lpcat` (an arbitrary structure with the same
-hom-sets could have a different composition). -/
-theorem ffsCpx_powered :
-    Nonempty (@PoweredByRepresentables FFSCpx _ L) ∧ Nonempty (@CopoweredByRepresentables FFSCpx _ L) := by
-  subst hL
-  letI : LPCat FFSCpx := ffsCpxLPCat
-  refine ⟨⟨?_⟩, ⟨?_⟩⟩
-  · exact
-    { pow := fun ε =>
-        { obj := fun Y => ⟨Y.carrier, fun σ => Y.F σ + ε, fun σ τ h => add_le_add_left (Y.mono σ τ h) _⟩
-          map := fun {Y Y'} f => ⟨f.1, fun σ => by
-            have := f.2 σ
-            push_cast at this ⊢
-            linarith⟩
-          map_id := fun _ => Subtype.ext rfl
-          map_comp := fun _ _ => Subtype.ext rfl }
-      powIso := fun x y ε r =>
-        { toFun := fun f => ⟨f.1, fun σ => by
-            have := f.2 σ
-            change x.F σ ≤ y.F (σ.image f.1) + ε + r at this
-            push_cast
-            linarith⟩
-          invFun := fun f => ⟨f.1, fun σ => by
-            have := f.2 σ
-            change x.F σ ≤ y.F (σ.image f.1) + (ε + r : ℝ≥0) at this
-            change x.F σ ≤ y.F (σ.image f.1) + ε + r
-            push_cast at this
-            linarith⟩
-          left_inv := fun _ => Subtype.ext rfl
-          right_inv := fun _ => Subtype.ext rfl }
-      powIso_S := fun _ _ => Subtype.ext rfl
-      powIso_x := fun _ _ => Subtype.ext rfl
-      powIso_y := fun _ _ => Subtype.ext rfl }
-  · exact
-    { copow := fun ε =>
-        { obj := fun X => ⟨X.carrier, fun σ => X.F σ - ε, fun σ τ h => sub_le_sub_right (X.mono σ τ h) _⟩
-          map := fun {X X'} f => ⟨f.1, fun σ => by
-            have := f.2 σ
-            push_cast at this ⊢
-            linarith⟩
-          map_id := fun _ => Subtype.ext rfl
-          map_comp := fun _ _ => Subtype.ext rfl }
-      copowIso := fun x y ε r =>
-        { toFun := fun f => ⟨f.1, fun σ => by
-            have := f.2 σ
-            change x.F σ - ε ≤ y.F (σ.image f.1) + r at this
-            push_cast
-            linarith⟩
-          invFun := fun f => ⟨f.1, fun σ => by
-            have := f.2 σ
-            change x.F σ ≤ y.F (σ.image f.1) + (ε + r : ℝ≥0) at this
-            change x.F σ - ε ≤ y.F (σ.image f.1) + r
-            push_cast at this
-            linarith⟩
-          left_inv := fun _ => Subtype.ext rfl
-          right_inv := fun _ => Subtype.ext rfl }
-      copowIso_S := fun _ _ => Subtype.ext rfl
-      copowIso_x := fun _ _ => Subtype.ext rfl
-      copowIso_y := fun _ _ => Subtype.ext rfl }
-
-/-- Lemma 6.8.2 and Corollary 6.8.3: the underlying category has binary products and pullbacks;
-hence `ffsCpx` admits weighted pullbacks and terminal midpoints. -/
-theorem ffsCpx_limits :
-    HasBinaryProducts FFSCpx ∧ HasPullbacks FFSCpx ∧ @HasTerminalMidpoints FFSCpx _ L := by
-  sorry
-
-/-- Lemma 6.8.4: acyclic morphisms of `ffsCpx` are stable under weighted pullback. -/
-theorem isStableUnderWeightedPullbacks_acyclicFFSCpx :
-    @IsStableUnderWeightedPullbacks FFSCpx _ L acyclicFFSCpx := by
-  sorry
-
-/-- Theorem 6.8.5. -/
-theorem ffsCpx_quotientInterleavingDist_spec (X Y : FFSCpx) :
-    @quotientInterleavingDist FFSCpx _ L acyclicFFSCpx X Y =
-      ⨅ (δ : ℝ≥0) (_ : ∃ (X' Y' : FFSCpx) (a : X' ⟶ X) (b : Y' ⟶ Y),
-        acyclicFFSCpx a ∧ acyclicFFSCpx b ∧ @IsInterleaved _ _ L X' Y' δ), (δ : ℝ≥0∞) := by
-  classical
-  letI := L
-  letI : acyclicFFSCpx.IsMultiplicative :=
-    { id_mem := fun X => ⟨Function.surjective_id, fun σ => by
-        change X.F σ = X.F (σ.image id)
-        simp⟩
-      comp_mem := fun {X Y Z} f g hf hg => ⟨hg.1.comp hf.1, fun σ => by
-        change X.F σ = Z.F (σ.image (g.1 ∘ f.1))
-        rw [hf.2 σ, hg.2 (σ.image f.1), Finset.image_image]⟩ }
-  exact quotientInterleavingDist_eq_inf_acyclicCover
-    (isStableUnderWeightedPullbacks_acyclicFFSCpx L hL) X Y
-
-/-- Lemma 6.8.6: `(d_I)/≃` reflects quotient interleavings. -/
-theorem ffsCpx_reflects : @ReflectsQuotientInterleavings FFSCpx _ L acyclicFFSCpx := by
-  sorry
-
-/-- Theorem 6.8.7: `(d_I)/≃` is geodesic, and two complexes at distance `0` are weakly
-equivalent. -/
-theorem ffsCpx_geodesic :
-    @IsGeodesicDist FFSCpx (@quotientInterleavingDist FFSCpx _ L acyclicFFSCpx) ∧
-    ∀ X Y : FFSCpx, @quotientInterleavingDist FFSCpx _ L acyclicFFSCpx X Y = 0 →
-      WeaklyEquivalent acyclicFFSCpx X Y := by
-  classical
-  letI := L
-  letI : acyclicFFSCpx.IsMultiplicative :=
-    { id_mem := fun X => ⟨Function.surjective_id, fun σ => by
-        change X.F σ = X.F (σ.image id)
-        simp⟩
-      comp_mem := fun {X Y Z} f g hf hg => ⟨hg.1.comp hf.1, fun σ => by
-        change X.F σ = Z.F (σ.image (g.1 ∘ f.1))
-        rw [hf.2 σ, hg.2 (σ.image f.1), Finset.image_image]⟩ }
-  refine ⟨quotientInterleavingDist_geodesic acyclicFFSCpx
-    (admitsCoherentFactorizations_of_midpoints (ffsCpx_limits L hL).2.2)
-    (isStableUnderWeightedPullbacks_acyclicFFSCpx L hL) (ffsCpx_reflects L hL), ?_⟩
-  intro X Y h
-  obtain ⟨X', Y', a, b, ha, hb, hi⟩ := exists_acyclicCover
-    (isStableUnderWeightedPullbacks_acyclicFFSCpx L hL)
-    (ffsCpx_reflects L hL X Y 0 (by simpa using h))
-  obtain ⟨i⟩ := isInterleaved_zero_iff.mp hi
-  have hiso : acyclicFFSCpx i.hom := by
-    have hleft : Function.LeftInverse i.inv.1 i.hom.1 := by
-      intro x
-      have h := congrArg (fun f : X' ⟶ X' => f.1 x) i.hom_inv_id
-      exact h
-    have hright : Function.RightInverse i.inv.1 i.hom.1 := by
-      intro x
-      have h := congrArg (fun f : Y' ⟶ Y' => f.1 x) i.inv_hom_id
-      exact h
-    refine ⟨hright.surjective, fun σ => le_antisymm ?_ ?_⟩
-    · simpa using i.hom.2 σ
-    · have h := i.inv.2 (σ.image i.hom.1)
-      have heq : (σ.image i.hom.1).image i.inv.1 = σ := by
-        rw [Finset.image_image]
-        have hid : i.inv.1 ∘ i.hom.1 = id := funext hleft
-        rw [hid, Finset.image_id]
-      simpa [heq] using h
-  exact weaklyEquivalent_of_span ⟨X', a, i.hom ≫ b, ha,
-    MorphismProperty.comp_mem _ _ _ hiso hb⟩
-
-/-- Proposition 6.8.8: `(d_I)/≃ = d_F`. -/
-theorem ffsCpx_quotientInterleavingDist_eq (X Y : FFSCpx) :
-    @quotientInterleavingDist FFSCpx _ L acyclicFFSCpx X Y = ffsCpxDist X Y := by
-  sorry
-
-end ffs
-
-/-! ### 6.9 Persistence diagrams -/
-
-/-- The distance `|x - x'|` on `[-∞, ∞]`. -/
-noncomputable def ereal_absDist (x y : EReal) : ℝ≥0∞ :=
-  if x = y then 0 else if x = ⊥ ∨ x = ⊤ ∨ y = ⊥ ∨ y = ⊤ then ∞ else ENNReal.ofReal |x.toReal - y.toReal|
-
-/-- Definition 6.9.1: the half plane `H_q = {(x, y) ∈ [-∞, ∞]² | x ≤ y}`. -/
-def Hq : Type := {p : EReal × EReal // p.1 ≤ p.2}
-
-/-- The distance `d_{H_q}` for `q ∈ [1, ∞]`. -/
-noncomputable def Hq.dist (q : ℝ≥0∞) (a b : Hq) : ℝ≥0∞ :=
-  if q = ∞ then max (ereal_absDist a.1.1 b.1.1) (ereal_absDist a.1.2 b.1.2)
-  else (ereal_absDist a.1.1 b.1.1 ^ q.toReal + ereal_absDist a.1.2 b.1.2 ^ q.toReal) ^ (1 / q.toReal)
-
-/-- The diagonal `Δ ⊆ H_q`. -/
-def Hq.diagonal : Set Hq := {a | a.1.1 = a.1.2}
-
-/-- Definition 6.9.2: a persistence diagram: a set `X` with `ψ : X → H_q` such that the
-off-diagonal part is countable and each diagonal point has countably infinite fibre. -/
-structure PersDiag where
-  carrier : Type u
-  ψ : carrier → Hq
-  countable_offDiag : (ψ ⁻¹' Hq.diagonalᶜ).Countable
-  fibres : ∀ d ∈ Hq.diagonal, (ψ ⁻¹' {d}).Countable ∧ (ψ ⁻¹' {d}).Infinite
-
-/-- Definition 6.9.3: the `p`-distortion `dist_p f` of a map `f : X → Y` (with `q`). -/
-noncomputable def PersDiag.distortion (p q : ℝ≥0∞) {X Y : PersDiag.{u}} (f : X.carrier → Y.carrier) :
-    ℝ≥0∞ :=
-  if p = ∞ then ⨆ x, Hq.dist q (X.ψ x) (Y.ψ (f x))
-  else (∑' x, Hq.dist q (X.ψ x) (Y.ψ (f x)) ^ p.toReal) ^ (1 / p.toReal)
-
-/-- The underlying category of `PD^p_q`: injective maps commuting with `ψ`. -/
-instance : Category.{u} PersDiag.{u} where
-  Hom X Y := {f : X.carrier → Y.carrier // Function.Injective f ∧ ∀ x, Y.ψ (f x) = X.ψ x}
-  id X := ⟨id, Function.injective_id, fun _ => rfl⟩
-  comp f g := ⟨g.1 ∘ f.1, g.2.1.comp f.2.1, fun x => by simp [g.2.2, f.2.2]⟩
-
-/-! Metric facts about `Hq.dist` and the `p`-distortion, used to build `PD^p_q`. -/
-
-theorem ereal_absDist_self (x : EReal) : ereal_absDist x x = 0 := by simp [ereal_absDist]
-
-theorem ereal_absDist_comm (x y : EReal) : ereal_absDist x y = ereal_absDist y x := by
-  unfold ereal_absDist
-  by_cases h : x = y
-  · subst h; rfl
-  · have h' : ¬ y = x := fun e => h e.symm
-    simp only [h, h', if_false, abs_sub_comm]
-    congr 1
-    simp only [eq_iff_iff]
-    tauto
-
-theorem ereal_absDist_eq_zero {x y : EReal} (h : ereal_absDist x y = 0) : x = y := by
-  by_contra hne
-  unfold ereal_absDist at h
-  rw [if_neg hne] at h
-  split_ifs at h with h1
-  · exact ENNReal.top_ne_zero h
-  · rw [ENNReal.ofReal_eq_zero, abs_nonpos_iff, sub_eq_zero] at h
-    push_neg at h1
-    obtain ⟨a1, a2, a3, a4⟩ := h1
-    apply hne
-    have hx : x = ((x.toReal : ℝ) : EReal) := (EReal.coe_toReal a2 a1).symm
-    have hy : y = ((y.toReal : ℝ) : EReal) := (EReal.coe_toReal a4 a3).symm
-    rw [hx, hy, h]
-
-theorem ereal_absDist_triangle (x y z : EReal) :
-    ereal_absDist x z ≤ ereal_absDist x y + ereal_absDist y z := by
-  by_cases hxz : x = z
-  · subst hxz; simp [ereal_absDist_self]
-  by_cases hxy : x = y
-  · subst hxy; simp [ereal_absDist_self]
-  by_cases hyz : y = z
-  · subst hyz; simp [ereal_absDist_self]
-  by_cases hinf : x = ⊥ ∨ x = ⊤ ∨ y = ⊥ ∨ y = ⊤ ∨ z = ⊥ ∨ z = ⊤
-  · have : ereal_absDist x y = ⊤ ∨ ereal_absDist y z = ⊤ := by
-      rcases hinf with h | h | h | h | h | h
-      · left; unfold ereal_absDist; rw [if_neg hxy, if_pos (Or.inl h)]
-      · left; unfold ereal_absDist; rw [if_neg hxy, if_pos (Or.inr (Or.inl h))]
-      · left; unfold ereal_absDist; rw [if_neg hxy, if_pos (Or.inr (Or.inr (Or.inl h)))]
-      · left; unfold ereal_absDist; rw [if_neg hxy, if_pos (Or.inr (Or.inr (Or.inr h)))]
-      · right; unfold ereal_absDist; rw [if_neg hyz, if_pos (Or.inr (Or.inr (Or.inl h)))]
-      · right; unfold ereal_absDist; rw [if_neg hyz, if_pos (Or.inr (Or.inr (Or.inr h)))]
-    rcases this with h | h <;> simp [h]
-  · push_neg at hinf
-    obtain ⟨a1, a2, a3, a4, a5, a6⟩ := hinf
-    simp only [ereal_absDist, hxz, hxy, hyz, if_false, a1, a2, a3, a4, a5, a6, or_self]
-    rw [← ENNReal.ofReal_add (abs_nonneg _) (abs_nonneg _)]
-    apply ENNReal.ofReal_le_ofReal
-    exact abs_sub_le _ _ _
-
-theorem tsum_Lp_add_le {ι : Type*} (f g : ι → ℝ≥0∞) {p : ℝ} (hp : 1 ≤ p) :
-    (∑' i, (f i + g i) ^ p) ^ (1 / p) ≤ (∑' i, f i ^ p) ^ (1 / p) + (∑' i, g i ^ p) ^ (1 / p) := by
-  have hp0 : 0 < p := lt_of_lt_of_le one_pos hp
-  set A := (∑' i, f i ^ p) ^ (1 / p)
-  set B := (∑' i, g i ^ p) ^ (1 / p)
-  have key : ∀ s : Finset ι, ∑ i ∈ s, (f i + g i) ^ p ≤ (A + B) ^ p := by
-    intro s
-    have h1 := ENNReal.Lp_add_le s f g hp
-    have h2 : (∑ i ∈ s, f i ^ p) ^ (1 / p) ≤ A :=
-      ENNReal.rpow_le_rpow (ENNReal.sum_le_tsum s) (by positivity)
-    have h3 : (∑ i ∈ s, g i ^ p) ^ (1 / p) ≤ B :=
-      ENNReal.rpow_le_rpow (ENNReal.sum_le_tsum s) (by positivity)
-    have h4 := h1.trans (add_le_add h2 h3)
-    calc ∑ i ∈ s, (f i + g i) ^ p = ((∑ i ∈ s, (f i + g i) ^ p) ^ (1 / p)) ^ p := by
-          rw [← ENNReal.rpow_mul, one_div, inv_mul_cancel₀ hp0.ne', ENNReal.rpow_one]
-      _ ≤ (A + B) ^ p := ENNReal.rpow_le_rpow h4 hp0.le
-  have : ∑' i, (f i + g i) ^ p ≤ (A + B) ^ p := by
-    rw [ENNReal.tsum_eq_iSup_sum]
-    exact iSup_le key
-  calc (∑' i, (f i + g i) ^ p) ^ (1 / p) ≤ ((A + B) ^ p) ^ (1 / p) :=
-        ENNReal.rpow_le_rpow this (by positivity)
-    _ = A + B := by rw [← ENNReal.rpow_mul, mul_one_div_cancel hp0.ne', ENNReal.rpow_one]
-
-theorem toReal_ge_one {q : ℝ≥0∞} (hq : 1 ≤ q) (hqt : q ≠ ∞) : 1 ≤ q.toReal := by
-  have := ENNReal.toReal_mono hqt hq
-  simpa using this
-
-theorem Hq.dist_self (q : ℝ≥0∞) (hq : 1 ≤ q) (a : Hq) : Hq.dist q a a = 0 := by
-  unfold Hq.dist
-  rw [ereal_absDist_self, ereal_absDist_self]
-  split_ifs with h
-  · simp
-  · have h1 := toReal_ge_one hq h
-    have h0 : (0 : ℝ) < q.toReal := lt_of_lt_of_le one_pos h1
-    rw [ENNReal.zero_rpow_of_pos h0]
-    simp [h0]
-
-theorem Hq.dist_eq_zero (q : ℝ≥0∞) (hq : 1 ≤ q) {a b : Hq} (h : Hq.dist q a b = 0) : a = b := by
-  unfold Hq.dist at h
-  have key : ereal_absDist a.1.1 b.1.1 = 0 ∧ ereal_absDist a.1.2 b.1.2 = 0 := by
-    split_ifs at h with hq'
-    · simpa using h
-    · have h1 := toReal_ge_one hq hq'
-      have h0 : (0 : ℝ) < q.toReal := lt_of_lt_of_le one_pos h1
-      have hpos : 0 < 1 / q.toReal := by positivity
-      rw [ENNReal.rpow_eq_zero_iff] at h
-      rcases h with ⟨h, _⟩ | ⟨_, h⟩
-      · have := add_eq_zero.mp h
-        refine ⟨?_, ?_⟩
-        · exact (ENNReal.rpow_eq_zero_iff_of_pos h0).mp this.1
-        · exact (ENNReal.rpow_eq_zero_iff_of_pos h0).mp this.2
-      · exact absurd h (not_lt.mpr hpos.le)
-  exact Subtype.ext (Prod.ext (ereal_absDist_eq_zero key.1) (ereal_absDist_eq_zero key.2))
-
-theorem Hq.dist_triangle (q : ℝ≥0∞) (hq : 1 ≤ q) (a b c : Hq) :
-    Hq.dist q a c ≤ Hq.dist q a b + Hq.dist q b c := by
-  have t1 := ereal_absDist_triangle a.1.1 b.1.1 c.1.1
-  have t2 := ereal_absDist_triangle a.1.2 b.1.2 c.1.2
-  unfold Hq.dist
-  split_ifs with hq'
-  · refine max_le ?_ ?_
-    · exact t1.trans (add_le_add (le_max_left _ _) (le_max_left _ _))
-    · exact t2.trans (add_le_add (le_max_right _ _) (le_max_right _ _))
-  · have h1 := toReal_ge_one hq hq'
-    have h0 : (0 : ℝ) < q.toReal := lt_of_lt_of_le one_pos h1
-    set x := ereal_absDist a.1.1 b.1.1
-    set y := ereal_absDist a.1.2 b.1.2
-    set x' := ereal_absDist b.1.1 c.1.1
-    set y' := ereal_absDist b.1.2 c.1.2
-    have hmono : (ereal_absDist a.1.1 c.1.1 ^ q.toReal + ereal_absDist a.1.2 c.1.2 ^ q.toReal) ^ (1 / q.toReal)
-        ≤ ((x + x') ^ q.toReal + (y + y') ^ q.toReal) ^ (1 / q.toReal) :=
-      ENNReal.rpow_le_rpow (add_le_add (ENNReal.rpow_le_rpow t1 h0.le) (ENNReal.rpow_le_rpow t2 h0.le))
-        (by positivity)
-    refine hmono.trans ?_
-    have := ENNReal.Lp_add_le (Finset.univ : Finset Bool) (fun i => if i then x else y)
-      (fun i => if i then x' else y') h1
-    simpa [Fintype.sum_bool, add_comm] using this
-
-theorem PersDiag.distortion_comp_le (p q : ℝ≥0∞) (hp : 1 ≤ p) (hq : 1 ≤ q) {X Y Z : PersDiag.{u}}
-    (f : X.carrier → Y.carrier) (g : Y.carrier → Z.carrier) (hf : Function.Injective f) :
-    PersDiag.distortion p q (X := X) (Y := Z) (g ∘ f) ≤
-      PersDiag.distortion p q (X := X) (Y := Y) f + PersDiag.distortion p q (X := Y) (Y := Z) g := by
-  have tri : ∀ x, Hq.dist q (X.ψ x) (Z.ψ (g (f x))) ≤
-      Hq.dist q (X.ψ x) (Y.ψ (f x)) + Hq.dist q (Y.ψ (f x)) (Z.ψ (g (f x))) :=
-    fun x => Hq.dist_triangle q hq _ _ _
-  unfold PersDiag.distortion
-  split_ifs with hp'
-  · refine iSup_le fun x => (tri x).trans (add_le_add
-      (le_iSup (fun x => Hq.dist q (X.ψ x) (Y.ψ (f x))) x)
-      (le_iSup (fun y => Hq.dist q (Y.ψ y) (Z.ψ (g y))) (f x)))
-  · have h1 := toReal_ge_one hp hp'
-    have h0 : (0 : ℝ) < p.toReal := lt_of_lt_of_le one_pos h1
-    calc (∑' x, Hq.dist q (X.ψ x) (Z.ψ ((g ∘ f) x)) ^ p.toReal) ^ (1 / p.toReal)
-        ≤ (∑' x, (Hq.dist q (X.ψ x) (Y.ψ (f x)) + Hq.dist q (Y.ψ (f x)) (Z.ψ (g (f x)))) ^ p.toReal) ^ (1 / p.toReal) :=
-          ENNReal.rpow_le_rpow (ENNReal.tsum_le_tsum fun x => ENNReal.rpow_le_rpow (tri x) h0.le)
-            (by positivity)
-      _ ≤ (∑' x, Hq.dist q (X.ψ x) (Y.ψ (f x)) ^ p.toReal) ^ (1 / p.toReal) +
-            (∑' x, Hq.dist q (Y.ψ (f x)) (Z.ψ (g (f x))) ^ p.toReal) ^ (1 / p.toReal) :=
-          tsum_Lp_add_le _ _ h1
-      _ ≤ _ := by
-          refine add_le_add le_rfl (ENNReal.rpow_le_rpow ?_ (by positivity))
-          exact ENNReal.tsum_comp_le_tsum_of_injective hf
-            (fun y => Hq.dist q (Y.ψ y) (Z.ψ (g y)) ^ p.toReal)
-
-theorem PersDiag.distortion_eq_zero_of_psi (p q : ℝ≥0∞) (hp : 1 ≤ p) (hq : 1 ≤ q)
-    {X Y : PersDiag.{u}} (f : X.carrier → Y.carrier) (h : ∀ x, Y.ψ (f x) = X.ψ x) :
-    PersDiag.distortion p q (X := X) (Y := Y) f = 0 := by
-  unfold PersDiag.distortion
-  have hz : ∀ x, Hq.dist q (X.ψ x) (Y.ψ (f x)) = 0 := fun x => by
-    rw [h x]; exact Hq.dist_self q hq _
-  split_ifs with hp'
-  · simp [hz]
-  · have h1 := toReal_ge_one hp hp'
-    have h0 : (0 : ℝ) < p.toReal := lt_of_lt_of_le one_pos h1
-    simp [hz, ENNReal.zero_rpow_of_pos h0, h0]
-
-theorem PersDiag.psi_of_distortion_le_zero (p q : ℝ≥0∞) (hp : 1 ≤ p) (hq : 1 ≤ q)
-    {X Y : PersDiag.{u}} (f : X.carrier → Y.carrier)
-    (h : PersDiag.distortion p q (X := X) (Y := Y) f ≤ 0) : ∀ x, Y.ψ (f x) = X.ψ x := by
-  intro x
-  unfold PersDiag.distortion at h
-  have hx : Hq.dist q (X.ψ x) (Y.ψ (f x)) = 0 := by
-    split_ifs at h with hp'
-    · exact le_antisymm ((le_iSup (fun x => Hq.dist q (X.ψ x) (Y.ψ (f x))) x).trans h) bot_le
-    · have h1 := toReal_ge_one hp hp'
-      have h0 : (0 : ℝ) < p.toReal := lt_of_lt_of_le one_pos h1
-      have hpos : 0 < 1 / p.toReal := by positivity
-      have h' : (∑' x, Hq.dist q (X.ψ x) (Y.ψ (f x)) ^ p.toReal) = 0 := by
-        have h2 := le_antisymm h bot_le
-        rcases (ENNReal.rpow_eq_zero_iff.mp h2) with ⟨h3, _⟩ | ⟨_, h3⟩
-        · exact h3
-        · exact absurd h3 (not_lt.mpr hpos.le)
-      have := (ENNReal.tsum_eq_zero.mp h') x
-      exact (ENNReal.rpow_eq_zero_iff_of_pos h0).mp this
-  exact (Hq.dist_eq_zero q hq hx).symm
-
-
-/-- Definition 6.9.4 (the structure): the locally persistent category `PD^p_q` of persistence diagrams:
-`Hom(X, Y)_ε = {f : X → Y injective | dist_p f ≤ ε}`. -/
-noncomputable def pdLPCat (p q : ℝ≥0∞) (hp : 1 ≤ p) (hq : 1 ≤ q) : LPCat PersDiag.{u} where
-  hom := fun X Y ε => {f : X.carrier → Y.carrier // Function.Injective f ∧
-    PersDiag.distortion p q (X := X) (Y := Y) f ≤ ε}
-  homZero := fun {X Y} => {
-    toFun := fun f => ⟨f.1, f.2.1, by
-      have := (PersDiag.distortion_eq_zero_of_psi p q hp hq (X := X) (Y := Y) f.1 f.2.2).le
-      simpa using this⟩
-    invFun := fun s => ⟨s.1, s.2.1, PersDiag.psi_of_distortion_le_zero p q hp hq s.1 (by
-      simpa using s.2.2)⟩
-    left_inv := fun f => Subtype.ext rfl
-    right_inv := fun s => Subtype.ext rfl }
-  comp := fun {X Y Z ε δ} g f => ⟨g.1 ∘ f.1, g.2.1.comp f.2.1,
-    (PersDiag.distortion_comp_le p q hp hq f.1 g.1 f.2.1).trans (by
-      push_cast; exact add_le_add f.2.2 g.2.2)⟩
-  S := fun {X Y ε δ} h f => ⟨f.1, f.2.1, f.2.2.trans (by exact_mod_cast h)⟩
-  id_comp := fun f => Subtype.ext rfl
-  comp_id := fun f => Subtype.ext rfl
-  assoc := fun f g h => Subtype.ext rfl
-  S_refl := fun f => Subtype.ext rfl
-  S_trans := fun h₁ h₂ f => Subtype.ext rfl
-  comp_S := fun hε hδ f g => Subtype.ext rfl
-  homZero_comp := fun f g => Subtype.ext rfl
-
-/-- Definition 6.9.4: the locally persistent category `PD^p_q` of persistence diagrams:
-`Hom(X, Y)_ε = {f : X → Y injective | dist_p f ≤ ε}`. -/
-theorem exists_pd_lpcat (p q : ℝ≥0∞) (hp : 1 ≤ p) (hq : 1 ≤ q) :
-    ∃ L : LPCat PersDiag.{u}, ∀ (X Y : PersDiag.{u}) (ε : ℝ≥0),
-      L.hom X Y ε = {f : X.carrier → Y.carrier // Function.Injective f ∧
-        PersDiag.distortion p q (X := X) (Y := Y) f ≤ ε} :=
-  ⟨pdLPCat p q hp hq, fun _ _ _ => rfl⟩
-
-/-- The `ℓ^p[ℓ^q]` matching (Wasserstein) distance:
-`inf_{bijections e} max (dist_p e, dist_p e⁻¹)`. -/
-noncomputable def matchingDist (p q : ℝ≥0∞) (X Y : PersDiag.{u}) : ℝ≥0∞ :=
-  ⨅ e : X.carrier ≃ Y.carrier, max (PersDiag.distortion p q (X := X) (Y := Y) e)
-    (PersDiag.distortion p q (X := Y) (Y := X) e.symm)
-
-/-- Proposition 6.9.5: the interleaving distance of `PD^p_q` is the `ℓ^p[ℓ^q]` matching
-distance.
-
-**Note.** Describing the hom-sets does not determine the locally
-persistent structure (the composition could differ), so Lean states the result for the canonical
-structure `pdLPCat` of Definition 6.9.4 (composition of maps). -/
-theorem pd_interleavingDist_eq_matchingDist (p q : ℝ≥0∞) (hp : 1 ≤ p) (hq : 1 ≤ q)
-    (X Y : PersDiag.{u}) :
-    @interleavingDist PersDiag.{u} _ (pdLPCat p q hp hq) X Y = matchingDist p q X Y := by
-  letI := pdLPCat p q hp hq
-  apply le_antisymm
-  · refine le_iInf fun e => ?_
-    by_cases hm : max (PersDiag.distortion p q (X := X) (Y := Y) e)
-        (PersDiag.distortion p q (X := Y) (Y := X) e.symm) = ⊤
-    · rw [hm]; exact le_top
-    · lift max (PersDiag.distortion p q (X := X) (Y := Y) e)
-        (PersDiag.distortion p q (X := Y) (Y := X) e.symm) to ℝ≥0 using hm with δ hδ
-      refine iInf₂_le_of_le δ ?_ le_rfl
-      refine ⟨⟨⟨e, e.injective, (le_max_left _ _).trans hδ.symm.le⟩,
-        ⟨e.symm, e.symm.injective, (le_max_right _ _).trans hδ.symm.le⟩, ?_, ?_⟩⟩
-      · exact Subtype.ext (funext fun x => e.symm_apply_apply x)
-      · exact Subtype.ext (funext fun y => e.apply_symm_apply y)
-  · refine le_iInf₂ fun δ hδ => ?_
-    obtain ⟨⟨f, g, hfg1, hfg2⟩⟩ := hδ
-    let e : X.carrier ≃ Y.carrier :=
-      { toFun := f.1
-        invFun := g.1
-        left_inv := fun x => congrFun (congrArg Subtype.val hfg1) x
-        right_inv := fun y => congrFun (congrArg Subtype.val hfg2) y }
-    exact (iInf_le _ e).trans (max_le f.2.2 g.2.2)
-
-end SimplicialAndDiagrams
 
 end ScoccolaPhd

@@ -179,11 +179,170 @@ def bracket (δ₁ δ₂ : ℤ) (D₁ D₂ : FreeAlg k V.G →ₗ[k] FreeAlg k V
     FreeAlg k V.G →ₗ[k] FreeAlg k V.G :=
   D₁ ∘ₗ D₂ - (-1 : k) ^ (δ₁.natAbs * δ₂.natAbs) • (D₂ ∘ₗ D₁)
 
+/-- A graded derivation satisfies the graded Leibniz rule on homogeneous left factors. -/
+theorem IsGradedDerivation.leibniz_hom {V : GradedGens} {δ : ℤ}
+    {D : FreeAlg k V.G →ₗ[k] FreeAlg k V.G}
+    (hD : V.IsGradedDerivation δ D) {n : ℕ} {x : FreeAlg k V.G} (hx : x ∈ V.hom n)
+    (y : FreeAlg k V.G) :
+    D (x * y) = D x * y + (-1 : k) ^ (δ.natAbs * n) • (x * D y) := by
+  have hy_mono : ∀ (a : FreeMonoid V.G) (y : FreeAlg k V.G),
+      D (mono a * y) = D (mono a) * y + (-1 : k) ^ (δ.natAbs * V.wdeg a) • (mono a * D y) := by
+    intro a y
+    induction y using MonoidAlgebra.induction_linear with
+    | zero => simp
+    | add y₁ y₂ hy₁ hy₂ =>
+      rw [mul_add, map_add, hy₁, hy₂, mul_add, map_add, mul_add, smul_add]
+      abel
+    | single b c =>
+      have hs : (MonoidAlgebra.single b c : FreeAlg k V.G) = c • mono b := by
+        simp [mono, MonoidAlgebra.smul_single]
+      rw [hs, mul_smul_comm, map_smul, hD.leibniz a b, smul_add, mul_smul_comm,
+        map_smul, mul_smul_comm, smul_comm ((-1 : k) ^ (δ.natAbs * V.wdeg a)) c]
+  induction hx using Submodule.span_induction with
+  | mem x hx =>
+    obtain ⟨a, ha, rfl⟩ := hx
+    rw [← ha]
+    exact hy_mono a y
+  | zero => simp
+  | add x z _ _ hx hz =>
+    rw [add_mul, map_add, hx, hz, map_add, add_mul, add_mul, smul_add]
+    abel
+  | smul c x _ hx =>
+    rw [smul_mul_assoc, map_smul, hx, map_smul, smul_mul_assoc, smul_mul_assoc, smul_add,
+      smul_comm c]
+
+private lemma neg_one_pow_eq_of_mod_two {α : Type*} [Ring α] {m n : ℕ}
+    (h : (m : ℤ) % 2 = (n : ℤ) % 2) : (-1 : α) ^ m = (-1 : α) ^ n := by
+  have h' : m % 2 = n % 2 := by omega
+  rw [← Nat.div_add_mod m 2, ← Nat.div_add_mod n 2, pow_add, pow_add,
+    pow_mul, pow_mul, neg_one_sq, one_pow, one_pow, one_mul, one_mul, h']
+
+private lemma int_mod_two_natAbs (a : ℤ) : a % 2 = (a.natAbs : ℤ) % 2 := by
+  cases a with
+  | ofNat n => simp
+  | negSucc n => rw [Int.natAbs_negSucc, Int.negSucc_eq]; omega
+
 /-- **§6.3.2.** The graded commutator of graded derivations is a graded derivation. -/
 theorem isGradedDerivation_bracket {δ₁ δ₂ : ℤ} {D₁ D₂ : FreeAlg k V.G →ₗ[k] FreeAlg k V.G}
     (h₁ : V.IsGradedDerivation δ₁ D₁) (h₂ : V.IsGradedDerivation δ₂ D₂) :
     V.IsGradedDerivation (δ₁ + δ₂) (V.bracket δ₁ δ₂ D₁ D₂) := by
-  sorry
+  refine ⟨?_, ?_, ?_⟩
+  · intro n x hx hnonneg
+    simp only [bracket, LinearMap.sub_apply, LinearMap.smul_apply, LinearMap.comp_apply]
+    apply Submodule.sub_mem
+    · by_cases h2 : (n : ℤ) + δ₂ < 0
+      · rw [h₂.deg_neg n x hx h2, map_zero]; exact zero_mem _
+      · push Not at h2
+        have hx2 := h₂.deg n x hx h2
+        have hx1 := h₁.deg ((n : ℤ) + δ₂).toNat (D₂ x) hx2 (by omega)
+        rwa [show (((n : ℤ) + δ₂).toNat : ℤ) + δ₁ = (n : ℤ) + (δ₁ + δ₂) by omega] at hx1
+    · apply Submodule.smul_mem
+      by_cases h1 : (n : ℤ) + δ₁ < 0
+      · rw [h₁.deg_neg n x hx h1, map_zero]; exact zero_mem _
+      · push Not at h1
+        have hx1 := h₁.deg n x hx h1
+        have hx2 := h₂.deg ((n : ℤ) + δ₁).toNat (D₁ x) hx1 (by omega)
+        rwa [show (((n : ℤ) + δ₁).toNat : ℤ) + δ₂ = (n : ℤ) + (δ₁ + δ₂) by omega] at hx2
+  · intro n x hx hneg
+    simp only [bracket, LinearMap.sub_apply, LinearMap.smul_apply, LinearMap.comp_apply]
+    have h12 : D₁ (D₂ x) = 0 := by
+      by_cases h2 : (n : ℤ) + δ₂ < 0
+      · rw [h₂.deg_neg n x hx h2, map_zero]
+      · push Not at h2
+        exact h₁.deg_neg ((n : ℤ) + δ₂).toNat (D₂ x) (h₂.deg n x hx h2) (by omega)
+    have h21 : D₂ (D₁ x) = 0 := by
+      by_cases h1 : (n : ℤ) + δ₁ < 0
+      · rw [h₁.deg_neg n x hx h1, map_zero]
+      · push Not at h1
+        exact h₂.deg_neg ((n : ℤ) + δ₁).toNat (D₁ x) (h₁.deg n x hx h1) (by omega)
+    rw [h12, h21, smul_zero, sub_zero]
+  · intro a b
+    have ha : (mono a : FreeAlg k V.G) ∈ V.hom (k := k) (V.wdeg a) :=
+      Submodule.subset_span ⟨a, rfl, rfl⟩
+    have hD1D2 : D₁ (D₂ (mono a * mono b)) =
+        D₁ (D₂ (mono a) * mono b) +
+        (-1 : k) ^ (δ₂.natAbs * V.wdeg a) • (D₁ (mono a) * D₂ (mono b)) +
+        (-1 : k) ^ (δ₂.natAbs * V.wdeg a + δ₁.natAbs * V.wdeg a) • (mono a * D₁ (D₂ (mono b))) := by
+      rw [h₂.leibniz a b, map_add, map_smul, h₁.leibniz_hom ha (D₂ (mono b)),
+        smul_add, smul_smul, ← pow_add, add_assoc]
+    have hD2D1 : D₂ (D₁ (mono a * mono b)) =
+        D₂ (D₁ (mono a) * mono b) +
+        (-1 : k) ^ (δ₁.natAbs * V.wdeg a) • (D₂ (mono a) * D₁ (mono b)) +
+        (-1 : k) ^ (δ₁.natAbs * V.wdeg a + δ₂.natAbs * V.wdeg a) • (mono a * D₂ (D₁ (mono b))) := by
+      rw [h₁.leibniz a b, map_add, map_smul, h₂.leibniz_hom ha (D₁ (mono b)),
+        smul_add, smul_smul, ← pow_add, add_assoc]
+    have hcross1 : D₁ (D₂ (mono a) * mono b) -
+        (-1 : k) ^ (δ₁.natAbs * δ₂.natAbs + δ₁.natAbs * V.wdeg a) • (D₂ (mono a) * D₁ (mono b)) =
+        D₁ (D₂ (mono a)) * mono b := by
+      by_cases h2 : (V.wdeg a : ℤ) + δ₂ < 0
+      · rw [h₂.deg_neg _ _ ha h2, zero_mul, map_zero, zero_mul, smul_zero, sub_zero, zero_mul]
+      · push Not at h2
+        rw [h₁.leibniz_hom (h₂.deg _ _ ha h2) (mono b)]
+        have hs : (-1 : k) ^ (δ₁.natAbs * ((V.wdeg a : ℤ) + δ₂).toNat) =
+            (-1 : k) ^ (δ₁.natAbs * δ₂.natAbs + δ₁.natAbs * V.wdeg a) := by
+          apply neg_one_pow_eq_of_mod_two
+          have htoNat : (((V.wdeg a : ℤ) + δ₂).toNat : ℤ) = (V.wdeg a : ℤ) + δ₂ := by omega
+          have hm2 : (δ₂.natAbs : ℤ) % 2 = δ₂ % 2 := (int_mod_two_natAbs δ₂).symm
+          rw [Nat.cast_mul, htoNat, Nat.cast_add, Nat.cast_mul, Nat.cast_mul,
+            Int.mul_emod, Int.add_emod ((δ₁.natAbs : ℤ) * _),
+            Int.mul_emod (δ₁.natAbs : ℤ) (δ₂.natAbs : ℤ),
+            Int.mul_emod (δ₁.natAbs : ℤ) (V.wdeg a : ℤ), hm2,
+            Int.add_emod (V.wdeg a : ℤ) δ₂]
+          rcases Int.emod_two_eq_zero_or_one δ₂ with h2' | h2' <;>
+            rcases Int.emod_two_eq_zero_or_one (V.wdeg a : ℤ) with ha' | ha' <;>
+            rcases Int.emod_two_eq_zero_or_one (δ₁.natAbs : ℤ) with h1' | h1' <;>
+            simp [h2', ha'] <;> omega
+        rw [hs, add_sub_cancel_right]
+    have hcross2 : (-1 : k) ^ (δ₂.natAbs * V.wdeg a) • (D₁ (mono a) * D₂ (mono b)) -
+        (-1 : k) ^ (δ₁.natAbs * δ₂.natAbs) • D₂ (D₁ (mono a) * mono b) =
+        -((-1 : k) ^ (δ₁.natAbs * δ₂.natAbs) • (D₂ (D₁ (mono a)) * mono b)) := by
+      by_cases h1 : (V.wdeg a : ℤ) + δ₁ < 0
+      · rw [h₁.deg_neg _ _ ha h1, zero_mul, smul_zero, zero_mul, map_zero, smul_zero, sub_zero,
+          zero_mul, smul_zero, neg_zero]
+      · push Not at h1
+        rw [h₂.leibniz_hom (h₁.deg _ _ ha h1) (mono b), smul_add, smul_smul, ← pow_add]
+        have hs : (-1 : k) ^ (δ₁.natAbs * δ₂.natAbs + δ₂.natAbs * ((V.wdeg a : ℤ) + δ₁).toNat) =
+            (-1 : k) ^ (δ₂.natAbs * V.wdeg a) := by
+          apply neg_one_pow_eq_of_mod_two
+          have htoNat : (((V.wdeg a : ℤ) + δ₁).toNat : ℤ) = (V.wdeg a : ℤ) + δ₁ := by omega
+          have hm1 : (δ₁.natAbs : ℤ) % 2 = δ₁ % 2 := (int_mod_two_natAbs δ₁).symm
+          rw [Nat.cast_add, Nat.cast_mul, Nat.cast_mul, Nat.cast_mul, htoNat,
+            Int.add_emod, Int.mul_emod (δ₁.natAbs : ℤ), Int.mul_emod (δ₂.natAbs : ℤ),
+            hm1, Int.add_emod (V.wdeg a : ℤ) δ₁, Int.mul_emod (δ₂.natAbs : ℤ) (V.wdeg a : ℤ)]
+          rcases Int.emod_two_eq_zero_or_one δ₁ with h1' | h1' <;>
+            rcases Int.emod_two_eq_zero_or_one (V.wdeg a : ℤ) with ha' | ha' <;>
+            rcases Int.emod_two_eq_zero_or_one (δ₂.natAbs : ℤ) with h2' | h2' <;>
+            simp [h1', ha'] <;> omega
+        rw [hs, sub_add_eq_sub_sub]
+        abel
+    have htail : (-1 : k) ^ (δ₂.natAbs * V.wdeg a + δ₁.natAbs * V.wdeg a) =
+        (-1 : k) ^ ((δ₁ + δ₂).natAbs * V.wdeg a) := by
+      apply neg_one_pow_eq_of_mod_two
+      have hm1 : (δ₁.natAbs : ℤ) % 2 = δ₁ % 2 := (int_mod_two_natAbs δ₁).symm
+      have hm2 : (δ₂.natAbs : ℤ) % 2 = δ₂ % 2 := (int_mod_two_natAbs δ₂).symm
+      have hm12 : ((δ₁ + δ₂).natAbs : ℤ) % 2 = (δ₁ + δ₂) % 2 := (int_mod_two_natAbs (δ₁ + δ₂)).symm
+      rw [Nat.cast_add, Nat.cast_mul, Nat.cast_mul, Nat.cast_mul,
+        Int.add_emod, Int.mul_emod (δ₂.natAbs : ℤ), Int.mul_emod (δ₁.natAbs : ℤ),
+        Int.mul_emod ((δ₁ + δ₂).natAbs : ℤ), hm1, hm2, hm12, Int.add_emod δ₁ δ₂]
+      rcases Int.emod_two_eq_zero_or_one δ₁ with h1' | h1' <;>
+        rcases Int.emod_two_eq_zero_or_one δ₂ with h2' | h2' <;>
+        rcases Int.emod_two_eq_zero_or_one (V.wdeg a : ℤ) with ha' | ha' <;>
+        simp [h1', h2', ha']
+    have hcross2' : (-1 : k) ^ (δ₁.natAbs * δ₂.natAbs) • (D₂ (D₁ (mono a)) * mono b) =
+        (-1 : k) ^ (δ₁.natAbs * δ₂.natAbs) • D₂ (D₁ (mono a) * mono b) -
+          (-1 : k) ^ (δ₂.natAbs * V.wdeg a) • (D₁ (mono a) * D₂ (mono b)) := by
+      rw [← neg_inj, neg_sub]
+      exact hcross2.symm
+    simp only [bracket, LinearMap.sub_apply, LinearMap.smul_apply, LinearMap.comp_apply,
+      hD1D2, hD2D1, smul_add, smul_smul, ← pow_add]
+    rw [htail, sub_mul, smul_mul_assoc, mul_sub, smul_sub, ← hcross1, hcross2']
+    rw [show (-1 : k) ^ (δ₁.natAbs * δ₂.natAbs + (δ₁.natAbs * V.wdeg a + δ₂.natAbs * V.wdeg a)) •
+        (mono a * D₂ (D₁ (mono b))) =
+        (-1 : k) ^ ((δ₁ + δ₂).natAbs * V.wdeg a) •
+          (mono a * ((-1 : k) ^ (δ₁.natAbs * δ₂.natAbs) • D₂ (D₁ (mono b)))) by
+      rw [mul_smul_comm, smul_smul, ← htail, ← pow_add, add_comm (δ₂.natAbs * V.wdeg a),
+        add_comm (δ₁.natAbs * δ₂.natAbs)]]
+    abel
 
 end GradedGens
 

@@ -217,11 +217,127 @@ theorem kahlerMap_mulLeft (a : FreeAlg k B.G)
     | add x y hx hy => simp only [add_tmul, map_add, hx, hy]
     | tmul b v => simp [kahlerMap, mul_assoc]
 
+private def barProjAux : List B.G → FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G
+  | [] => 0
+  | v :: w => ((1 : FreeAlg k B.G) ⊗ₜ Finsupp.single v (1 : k)) ⊗ₜ mono (FreeMonoid.ofList w) +
+      TensorProduct.map (TensorProduct.map (LinearMap.mulLeft k (mono (FreeMonoid.of v) : FreeAlg k B.G))
+        (LinearMap.id : (B.G →₀ k) →ₗ[k] _)) LinearMap.id (barProjAux w)
+
+private theorem kahlerMap_barProjAux (w : List B.G) :
+    kahlerMap B (barProjAux B w) = mono (FreeMonoid.ofList w) ⊗ₜ 1 - 1 ⊗ₜ mono (FreeMonoid.ofList w) := by
+  induction w with
+  | nil => simp [barProjAux, ← MonoidAlgebra.one_def]
+  | cons v w ih =>
+    rw [barProjAux, map_add, kahlerMap_mulLeft, ih]
+    simp [kahlerMap, genIncl, Finsupp.linearCombination_single]
+
 /-- **Lemma 2.2.** For a quasi-free `B = T(V)`, the map `g : B ⊗ V ⊗ B → Ω¹_B` is an isomorphism
 of `B`-bimodules: it is injective with image `Ω¹_B`. -/
 theorem lemma_2_2 :
     Function.Injective (kahlerMap B) ∧ LinearMap.range (kahlerMap B) = kahler B := by
-  sorry
+  let barProjLin : FreeAlg k B.G →ₗ[k] FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G :=
+    linOnMonomials fun w => barProjAux B w.toList
+  let mulLeftMap : FreeAlg k B.G →ₗ[k]
+      (FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G →ₗ[k]
+        FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G) :=
+    { toFun := fun a =>
+        TensorProduct.map (TensorProduct.map (LinearMap.mulLeft k a) LinearMap.id) LinearMap.id
+      map_add' := fun a₁ a₂ => by
+        refine LinearMap.ext fun x => ?_
+        induction x using TensorProduct.inductionOn with
+        | add x y hx hy => simp only [LinearMap.add_apply, map_add] at hx hy ⊢; rw [hx, hy]
+        | tmul av c =>
+          induction av using TensorProduct.inductionOn with
+          | add x y hx hy => simp only [LinearMap.add_apply, add_tmul, map_add] at hx hy ⊢; rw [hx, hy]
+          | tmul b v => simp [add_mul, add_tmul]
+      map_smul' := fun r a => by
+        refine LinearMap.ext fun x => ?_
+        induction x using TensorProduct.inductionOn with
+        | add x y hx hy => simp only [LinearMap.smul_apply, map_add, map_smul] at hx hy ⊢; rw [hx, hy]
+        | tmul av c =>
+          induction av using TensorProduct.inductionOn with
+          | add x y hx hy => simp only [LinearMap.smul_apply, add_tmul, map_add, map_smul] at hx hy ⊢; rw [hx, hy]
+          | tmul b v => simp [smul_mul_assoc, smul_tmul'] }
+  let kahlerInv : FreeAlg k B.G ⊗[k] FreeAlg k B.G →ₗ[k]
+      FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G :=
+    TensorProduct.lift
+      { toFun := fun a => -(mulLeftMap a ∘ₗ barProjLin)
+        map_add' := fun a₁ a₂ => by ext b; simp [map_add]; try abel
+        map_smul' := fun r a => by ext b; simp [map_smul] }
+  have hML : ∀ (a : FreeAlg k B.G) (x : FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G),
+      mulLeftMap a x = TensorProduct.map (TensorProduct.map (LinearMap.mulLeft k a) LinearMap.id)
+        LinearMap.id x := fun _ _ => rfl
+  have hbar : ∀ w : FreeMonoid B.G, barProjLin (mono w) = barProjAux B w.toList := by
+    intro w
+    simp [barProjLin, linOnMonomials, mono]
+  have hinv : ∀ (a : FreeAlg k B.G) (w : FreeMonoid B.G),
+      kahlerInv (a ⊗ₜ mono w) = -(mulLeftMap a (barProjAux B w.toList)) := by
+    intro a w
+    simp only [kahlerInv, TensorProduct.lift.tmul, LinearMap.coe_mk, AddHom.coe_mk,
+      LinearMap.neg_apply, LinearMap.comp_apply]
+    rw [hbar]
+  have key : ∀ (a : FreeAlg k B.G) (g : B.G) (w : FreeMonoid B.G),
+      kahlerInv (kahlerMap B ((a ⊗ₜ Finsupp.single g (1 : k)) ⊗ₜ mono w)) =
+        (a ⊗ₜ Finsupp.single g (1 : k)) ⊗ₜ mono w := by
+    intro a g w
+    have h1 : kahlerMap B (((a ⊗ₜ Finsupp.single g (1 : k)) ⊗ₜ mono w)) =
+        (a * mono (FreeMonoid.of g)) ⊗ₜ mono w - a ⊗ₜ mono (FreeMonoid.of g * w) := by
+      simp [kahlerMap, genIncl, Finsupp.linearCombination_single,
+        show (mono (FreeMonoid.of g) * mono w : FreeAlg k B.G) = mono (FreeMonoid.of g * w) by
+          simp [mono, MonoidAlgebra.single_mul_single]]
+    have h2 : (FreeMonoid.of g * w).toList = g :: w.toList := by simp
+    simp only [h1, map_sub]
+    have hmul_comp : ∀ (x : FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G),
+        mulLeftMap a (TensorProduct.map (TensorProduct.map
+          (LinearMap.mulLeft k (mono (FreeMonoid.of g) : FreeAlg k B.G)) LinearMap.id) LinearMap.id x) =
+        mulLeftMap (a * mono (FreeMonoid.of g)) x := by
+      intro x
+      induction x using TensorProduct.inductionOn with
+      | add x y hx hy => simp only [map_add, hx, hy]
+      | tmul av c =>
+        induction av using TensorProduct.inductionOn with
+        | add x y hx hy => simp only [add_tmul, map_add, hx, hy]
+        | tmul b v => simp [mulLeftMap, mul_assoc]
+    rw [hinv, hinv, h2, barProjAux, map_add, hmul_comp]
+    simp only [mulLeftMap, LinearMap.coe_mk, AddHom.coe_mk, TensorProduct.map_tmul,
+      LinearMap.mulLeft_apply, mul_one, LinearMap.id_apply, FreeMonoid.ofList_toList]
+    abel
+  have hleft_inv : kahlerInv ∘ₗ kahlerMap B = LinearMap.id := by
+    ext a g w
+    exact key (mono a) g w
+  have hright_inv : ∀ x, kahlerMap B (kahlerInv x) = x - (multMap B x) ⊗ₜ 1 := by
+    intro x
+    induction x using TensorProduct.inductionOn with
+    | add x y hx hy => simp only [map_add, hx, hy, add_tmul]; abel
+    | tmul a b =>
+      induction b using MonoidAlgebra.induction_linear with
+      | zero => simp
+      | add b₁ b₂ hb₁ hb₂ => simp only [tmul_add, map_add, hb₁, hb₂, mul_add, add_tmul]; abel
+      | single w c =>
+        have hs : (MonoidAlgebra.single w c : FreeAlg k B.G) = c • mono w := by
+          simp [mono, MonoidAlgebra.smul_single]
+        rw [hs]
+        simp only [tmul_smul, map_smul, ← smul_tmul', ← smul_sub]
+        congr 1
+        rw [hinv, map_neg, hML, kahlerMap_mulLeft, kahlerMap_barProjAux]
+        simp [multMap, FreeMonoid.ofList_toList]
+  constructor
+  · intro x y hxy
+    have := congrArg kahlerInv hxy
+    simpa [LinearMap.comp_apply] using
+      (LinearMap.congr_fun hleft_inv x).symm.trans (this.trans (LinearMap.congr_fun hleft_inv y))
+  · apply le_antisymm
+    · rintro y ⟨x, rfl⟩
+      simp only [kahler, LinearMap.mem_ker]
+      induction x using TensorProduct.inductionOn with
+      | add x y hx hy => simp only [map_add, hx, hy, add_zero]
+      | tmul av c =>
+        induction av using TensorProduct.inductionOn with
+        | add x y hx hy => simp only [add_tmul, map_add, hx, hy, add_zero]
+        | tmul a v => simp [kahlerMap, multMap, mul_assoc]
+    · intro x hx
+      refine ⟨kahlerInv x, ?_⟩
+      rw [hright_inv, show multMap B x = 0 from hx, zero_tmul, sub_zero]
 
 /-- The non-trivial component of the projection `π : Bar(B) → S*(B)` of Lemma 2.4:
 `π(1 ⊗ v₁ ⋯ vₙ ⊗ 1) = ∑ᵢ v₁ ⋯ v_{i-1} ⊗ vᵢ ⊗ v_{i+1} ⋯ vₙ`. -/

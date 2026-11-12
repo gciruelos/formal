@@ -462,12 +462,13 @@ theorem lqS_r (LQ : LQPCat Q C) {x y z : C} {ε ε' δ : Q} (h : ε ≤ ε') (g 
   have := LQ.comp_S h (le_refl δ) f g
   rwa [LQ.S_refl] at this
 
-/-- Lemma 5.1.5 (powered case). Here `QPoweredByRepresentables` carries the naturality laws of
-`PoweredByRepresentables`, and `Q` is commutative (as in all applications). -/
-theorem poweredByRepresentables_of_changeOfEnrichment (φ : SuperlinearFamily Q)
+/-- Helper for Lemma 5.1.5 (powered case): existence of a `PoweredByRepresentables` structure
+obtained by change of enrichment with explicit `pow`. -/
+theorem exists_powered_of_changeOfEnrichment (φ : SuperlinearFamily Q)
     (hφ : ∀ a b, φ.toFun (a + b) = φ.toFun a + φ.toFun b) (LQ : LQPCat Q C)
     (P : QPoweredByRepresentables LQ) (L : LPCat C) (h : IsChangeOfEnrichment φ LQ L) :
-    Nonempty (@PoweredByRepresentables C _ L) := by
+    ∃ P' : @PoweredByRepresentables C _ L, ∀ ε, P'.pow ε = P.pow (φ.toFun ε) := by
+  letI := L
   obtain ⟨e, hz, hc, hs⟩ := h
   let eqv : ∀ (x y : C) (ε : ℝ≥0), L.hom x y ε ≃ LQ.hom x y (φ.toFun ε) :=
     fun x y ε => Equiv.cast (e x y ε)
@@ -498,7 +499,7 @@ theorem poweredByRepresentables_of_changeOfEnrichment (φ : SuperlinearFamily Q)
                 right_inv := fun w => by simp [toL_ofL] }
             powIso_S := ?_
             powIso_x := ?_
-            powIso_y := ?_ }⟩
+            powIso_y := ?_ }, fun _ => rfl⟩
   · intro x y ε r r' h u
     apply (eqv _ _ _).injective
     simp only [toL, Equiv.coe_fn_mk, Equiv.apply_symm_apply, F_S, P.powIso_S, LQ.S_trans]
@@ -512,6 +513,14 @@ theorem poweredByRepresentables_of_changeOfEnrichment (φ : SuperlinearFamily Q)
       lqS_l, LQ.S_trans]
     rw [P.powIso_y f]
     simp only [lqS_l, lqS_r, LQ.S_trans]
+
+/-- Lemma 5.1.5 (powered case). Here `QPoweredByRepresentables` carries the naturality laws of
+`PoweredByRepresentables`, and `Q` is commutative (as in all applications). -/
+theorem poweredByRepresentables_of_changeOfEnrichment (φ : SuperlinearFamily Q)
+    (hφ : ∀ a b, φ.toFun (a + b) = φ.toFun a + φ.toFun b) (LQ : LQPCat Q C)
+    (P : QPoweredByRepresentables LQ) (L : LPCat C) (h : IsChangeOfEnrichment φ LQ L) :
+    Nonempty (@PoweredByRepresentables C _ L) :=
+  ⟨(exists_powered_of_changeOfEnrichment φ hφ LQ P L h).choose⟩
 
 /-- Lemma 5.1.5, copowered case. -/
 theorem copoweredByRepresentables_of_changeOfEnrichment (φ : SuperlinearFamily Q)
@@ -1476,12 +1485,36 @@ theorem persistent_copowered (v : ℝ≥0 × ℝ≥0)
   copoweredByRepresentables_of_changeOfEnrichment (pairFamily v) (pairFamily_additive v)
     (persistentLQPCat C) (persistentQCopowered hC) L hL
 
+/-- Helper for Proposition 5.1.9: `persPow` preserves limits of any shape `J` preserved by
+pointwise powering. -/
+theorem persPow_preservesLimitsOfShape (P : PoweredByRepresentables C) (q : ℝ≥0 × ℝ≥0)
+    (J : Type*) [Category J] [HasLimitsOfShape J C]
+    (hJ : PreservesLimitsOfShape J (P.pow q.2)) :
+    PreservesLimitsOfShape J (persPow P q) := by
+  let shift : ℝ ⥤ ℝ :=
+    { obj := fun s => s + q.1
+      map := fun {s t} f => homOfLE (add_le_add_left (leOfHom f) _) }
+  let F : (ℝ ⥤ C) ⥤ (ℝ ⥤ C) :=
+    (Functor.whiskeringLeft ℝ ℝ C).obj shift ⋙ (Functor.whiskeringRight ℝ C C).obj (P.pow q.2)
+  have hF : PreservesLimitsOfShape J F := inferInstance
+  let e : F ≅ persPow P q :=
+    NatIso.ofComponents (fun Y => NatIso.ofComponents (fun _ => Iso.refl _) (by
+      intro s t f; simp [F, shift, persPow, persPowObj])) (by
+      intro Y Z α; ext s; simp [F, shift, persPow, persPowObj])
+  exact preservesLimitsOfShape_of_natIso e
+
 /-- Proposition 5.1.9: if `C₀` has pullbacks, products and sequential limits, `C` is powered
 by representables with powers preserving pullbacks, binary products, sequential limits and
 morphisms of `W`, and `W` is closed under sequential limits, then the quotient interleaving
 distance on `(C^ℝ_v, W^→)` is intrinsic and complete, and is computed by interleavings of
-weakly equivalent replacements. -/
+weakly equivalent replacements.
+
+**Gap (missing hypothesis).** Proposition 5.1.9 assumes `(C, W)` is a relative locally persistent
+category without stating that `W` is stable under base change (pullbacks); its proof invokes
+Theorem 4.1.4 and Theorem 4.3.3 via Lemma 4.1.5, which require `W` to be stable under pullbacks.
+We add `[W.IsStableUnderBaseChange]`. -/
 theorem persistent_quotient_dist (W : MorphismProperty C) [W.IsMultiplicative]
+    [W.IsStableUnderBaseChange]
     [HasPullbacks C] [HasBinaryProducts C] [HasLimitsOfShape ℕᵒᵖ C]
     (P : PoweredByRepresentables C)
     (hpb : ∀ ε, PreservesLimitsOfShape WalkingCospan (P.pow ε))
@@ -1496,7 +1529,51 @@ theorem persistent_quotient_dist (W : MorphismProperty C) [W.IsMultiplicative]
     ∀ X Y : ℝ ⥤ C, @quotientInterleavingDist (ℝ ⥤ C) _ L (levelwiseProp W) X Y =
       ⨅ (δ : ℝ≥0) (_ : ∃ X' Y' : ℝ ⥤ C, ∃ (a : X' ⟶ X) (b : Y' ⟶ Y),
           levelwiseProp W a ∧ levelwiseProp W b ∧ @IsInterleaved (ℝ ⥤ C) _ L X' Y' δ), (δ : ℝ≥0∞) := by
-  sorry
+  letI := L
+  obtain ⟨P', hpow_eq⟩ := exists_powered_of_changeOfEnrichment (pairFamily v) (pairFamily_additive v)
+      (persistentLQPCat C) (persistentQPowered P) L hL
+  letI := P'
+  have hpb' : ∀ ε, PreservesLimitsOfShape WalkingCospan (P'.pow ε) := fun ε => by
+    rw [hpow_eq ε]
+    exact persPow_preservesLimitsOfShape P ((pairFamily v).toFun ε) WalkingCospan (hpb _)
+  have hprod' : ∀ ε, PreservesLimitsOfShape (Discrete WalkingPair) (P'.pow ε) := fun ε => by
+    rw [hpow_eq ε]
+    exact persPow_preservesLimitsOfShape P ((pairFamily v).toFun ε) (Discrete WalkingPair) (hprod _)
+  have hseq' : ∀ ε, PreservesLimitsOfShape ℕᵒᵖ (P'.pow ε) := fun ε => by
+    rw [hpow_eq ε]
+    exact persPow_preservesLimitsOfShape P ((pairFamily v).toFun ε) ℕᵒᵖ (hseq _)
+  haveI : (levelwiseProp W).IsMultiplicative :=
+    { id_mem := fun X r => W.id_mem (X.obj r)
+      comp_mem := fun f g hf hg r => W.comp_mem _ _ (hf r) (hg r) }
+  haveI : (levelwiseProp W).RespectsIso :=
+    { precomp := fun e _ _ hf r =>
+        MorphismProperty.RespectsIso.precomp W (((evaluation ℝ C).obj r).map e) _ (hf r)
+      postcomp := fun e _ _ hf r =>
+        MorphismProperty.RespectsIso.postcomp W (((evaluation ℝ C).obj r).map e) _ (hf r) }
+  haveI : (levelwiseProp W).IsStableUnderBaseChange := by
+    apply MorphismProperty.IsStableUnderBaseChange.of_forall_exists_isPullback
+    intro X Y S f g _ hg
+    refine ⟨pullback f g, pullback.fst f g, pullback.snd f g, IsPullback.of_hasPullback f g, ?_⟩
+    intro r
+    have hpb_r : IsPullback ((pullback.fst f g).app r) ((pullback.snd f g).app r)
+        (f.app r) (g.app r) :=
+      (IsPullback.of_hasPullback f g).map ((evaluation ℝ C).obj r)
+    exact MorphismProperty.IsStableUnderBaseChange.of_isPullback hpb_r.flip (hg r)
+  have hW' : ∀ ε {a b : ℝ ⥤ C} (f : a ⟶ b),
+      levelwiseProp W f → levelwiseProp W ((P'.pow ε).map f) := fun ε a b f hf r => by
+    rw [hpow_eq ε]
+    exact hW _ (f.app (r + ((pairFamily v).toFun ε).1)) (hf _)
+  have hWlim' : IsClosedUnderSequentialLimits (levelwiseProp W) := by
+    intro X c hc hX n r
+    exact hWlim (X ⋙ (evaluation ℝ C).obj r) (((evaluation ℝ C).obj r).mapCone c)
+      (isLimitOfPreserves ((evaluation ℝ C).obj r) hc) (fun f => hX f r) n
+  refine ⟨?_, ?_, ?_⟩
+  · exact quotientInterleavingDistOf_intrinsic
+      (admitsCoherentFactorizations_of_midpoints (hasTerminalMidpoints_of_powered hprod' hpb'))
+      (WeaklyEquivalent (levelwiseProp W))
+      (weaklyEquivalent_equivalence (levelwiseProp W))
+  · exact quotientInterleavingDist_complete_of_powered hpb' hseq' (levelwiseProp W) hW' hWlim'
+  · exact quotientInterleavingDist_eq_inf_acyclicCover_of_powered hpb' (levelwiseProp W) hW'
 
 /-- Proposition 5.1.11: a locally persistent functor which preserves acyclic morphisms
 induces, objectwise, a functor `C^ℝ → D^ℝ` preserving acyclic morphisms (and compatible with

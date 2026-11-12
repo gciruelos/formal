@@ -185,7 +185,105 @@ by a zig-zag of trivial fibrations. -/
 theorem weaklyEquivalent_tFib_of_fibrant (M : ModelCategory C) {x y : C}
     (hx : IsFibrant M.str x) (hy : IsFibrant M.str y) (h : WeaklyEquivalent M.str.W x y) :
     WeaklyEquivalent (trivialFibrations M.str) x y := by
-  sorry
+  haveI : HasLimits C := M.hasLimits
+  have hFib_eq : M.str.Fib = M.str.wfs₂.L.rlp := by
+    rw [← M.str.wfs₂_R, M.str.wfs₂.R_eq]
+  have hFib_stable : M.str.Fib.IsStableUnderBaseChange := by
+    rw [hFib_eq]; infer_instance
+  have hFib_mult : M.str.Fib.IsMultiplicative := by
+    rw [hFib_eq]; infer_instance
+  have hFib_iso : M.str.Fib.RespectsIso := by
+    rw [hFib_eq]; infer_instance
+  have id_W : ∀ z : C, M.str.W (𝟙 z) := fun z => by
+    let a : CategoryTheory.Arrow C := CategoryTheory.Arrow.mk (𝟙 z)
+    have hπ : M.str.W (M.str.wfs₁.π.app a) := by
+      have := M.str.wfs₁.π_mem a
+      rw [M.str.wfs₁_R] at this
+      exact this.2
+    have hcomp : M.str.wfs₁.π.app a ≫ 𝟙 z = M.str.wfs₁.π.app a := Category.comp_id _
+    exact M.str.twoOutOfThree.of_precomp (M.str.wfs₁.π.app a) (𝟙 z) hπ (by rw [hcomp]; exact hπ)
+  have trivFib_of_weq : ∀ {a b : C} (ha : IsFibrant M.str a) (hb : IsFibrant M.str b)
+      (f : a ⟶ b), M.str.W f → WeaklyEquivalent (trivialFibrations M.str) a b := by
+    intro a b ha hb f hf
+    let arr : CategoryTheory.Arrow C := CategoryTheory.Arrow.mk (prod.lift (𝟙 a) f)
+    let e := M.str.wfs₂.mid.obj arr
+    let j : a ⟶ e := M.str.wfs₂.ι.app arr
+    let q : e ⟶ a ⨯ b := M.str.wfs₂.π.app arr
+    have hj_mem : (M.str.Cof ⊓ M.str.W) j := by
+      rw [← M.str.wfs₂_L]; exact M.str.wfs₂.ι_mem arr
+    have hq_fib : M.str.Fib q := by
+      rw [← M.str.wfs₂_R]; exact M.str.wfs₂.π_mem arr
+    have hpb_fst : IsPullback (prod.fst : a ⨯ b ⟶ a) (prod.snd : a ⨯ b ⟶ b)
+        (terminal.from a) (terminal.from b) :=
+      { w := terminal.hom_ext _ _
+        isLimit' := ⟨PullbackCone.IsLimit.mk _ (fun s => prod.lift s.fst s.snd)
+          (fun _ => prod.lift_fst _ _) (fun _ => prod.lift_snd _ _)
+          (fun _ _ h1 h2 => prod.hom_ext (by simpa using h1) (by simpa using h2))⟩ }
+    have hfst_fib : M.str.Fib (prod.fst : a ⨯ b ⟶ a) :=
+      hFib_stable.of_isPullback hpb_fst.flip (hb _ (terminal.from b) terminalIsTerminal)
+    have hsnd_fib : M.str.Fib (prod.snd : a ⨯ b ⟶ b) :=
+      hFib_stable.of_isPullback hpb_fst (ha _ (terminal.from a) terminalIsTerminal)
+    have hp1_fib : M.str.Fib (q ≫ prod.fst) := hFib_mult.comp_mem q prod.fst hq_fib hfst_fib
+    have hp2_fib : M.str.Fib (q ≫ prod.snd) := hFib_mult.comp_mem q prod.snd hq_fib hsnd_fib
+    have hfac1 : j ≫ q ≫ prod.fst = 𝟙 a := by
+      rw [← Category.assoc, M.str.wfs₂.fac arr]
+      exact prod.lift_fst (𝟙 a) f
+    have hfac2 : j ≫ q ≫ prod.snd = f := by
+      rw [← Category.assoc, M.str.wfs₂.fac arr]
+      exact prod.lift_snd (𝟙 a) f
+    have hp1_W : M.str.W (q ≫ prod.fst) :=
+      M.str.twoOutOfThree.of_precomp j (q ≫ prod.fst) hj_mem.2 (by rw [hfac1]; exact id_W a)
+    have hp2_W : M.str.W (q ≫ prod.snd) :=
+      M.str.twoOutOfThree.of_precomp j (q ≫ prod.snd) hj_mem.2 (by rw [hfac2]; exact hf)
+    have h1 : WeaklyEquivalent (trivialFibrations M.str) a e :=
+      Relation.EqvGen.symm _ _ (Relation.EqvGen.rel e a ⟨q ≫ prod.fst, hp1_fib, hp1_W⟩)
+    have h2 : WeaklyEquivalent (trivialFibrations M.str) e b :=
+      Relation.EqvGen.rel e b ⟨q ≫ prod.snd, hp2_fib, hp2_W⟩
+    exact Relation.EqvGen.trans a e b h1 h2
+  let R : C → C := fun z => M.str.wfs₂.mid.obj (CategoryTheory.Arrow.mk (terminal.from z))
+  let r : ∀ z : C, z ⟶ R z := fun z => M.str.wfs₂.ι.app (CategoryTheory.Arrow.mk (terminal.from z))
+  have hr_mem : ∀ z : C, (M.str.Cof ⊓ M.str.W) (r z) := fun z => by
+    rw [← M.str.wfs₂_L]; exact M.str.wfs₂.ι_mem (CategoryTheory.Arrow.mk (terminal.from z))
+  have hR_fib : ∀ z : C, IsFibrant M.str (R z) := fun z T t ht => by
+    let p := M.str.wfs₂.π.app (CategoryTheory.Arrow.mk (terminal.from z))
+    have hp : M.str.Fib p := by
+      rw [← M.str.wfs₂_R]; exact M.str.wfs₂.π_mem (CategoryTheory.Arrow.mk (terminal.from z))
+    let iso : ⊤_ C ≅ T := terminalIsTerminal.uniqueUpToIso ht
+    have ht_eq : t = p ≫ iso.hom := ht.hom_ext _ _
+    rw [ht_eq]
+    exact MorphismProperty.RespectsIso.postcomp M.str.Fib iso.hom p hp
+  have hR_weq : ∀ {a b : C} (f : a ⟶ b), M.str.W f →
+      WeaklyEquivalent (trivialFibrations M.str) (R a) (R b) := by
+    intro a b f hf
+    let pb := M.str.wfs₂.π.app (CategoryTheory.Arrow.mk (terminal.from b))
+    have hpb_fib : M.str.Fib pb := by
+      rw [← M.str.wfs₂_R]; exact M.str.wfs₂.π_mem (CategoryTheory.Arrow.mk (terminal.from b))
+    have hsq : CommSq (f ≫ r b) (r a) pb (terminal.from (R a)) :=
+      ⟨terminal.hom_ext _ _⟩
+    have hllp : HasLiftingProperty (r a) pb := by
+      have hrL : M.str.wfs₂.L (r a) := M.str.wfs₂.ι_mem (CategoryTheory.Arrow.mk (terminal.from a))
+      rw [M.str.wfs₂.L_eq, M.str.wfs₂_R] at hrL
+      exact hrL pb hpb_fib
+    let Rf : R a ⟶ R b := hsq.lift
+    have hRf_W : M.str.W Rf := by
+      have hcomp : M.str.W (r a ≫ Rf) := by
+        rw [hsq.fac_left]
+        exact M.str.twoOutOfThree.comp_mem f (r b) hf (hr_mem b).2
+      exact M.str.twoOutOfThree.of_precomp (r a) Rf (hr_mem a).2 hcomp
+    exact trivFib_of_weq (hR_fib a) (hR_fib b) Rf hRf_W
+  have hxy : WeaklyEquivalent (trivialFibrations M.str) (R x) (R y) := by
+    clear hx hy
+    induction h with
+    | rel a b hab =>
+      obtain ⟨f, hf⟩ := hab
+      exact hR_weq f hf
+    | refl a => exact Relation.EqvGen.refl _
+    | symm a b _ ih => exact Relation.EqvGen.symm _ _ ih
+    | trans a b c _ _ ih1 ih2 => exact Relation.EqvGen.trans _ _ _ ih1 ih2
+  have hxR := trivFib_of_weq hx (hR_fib x) (r x) (hr_mem x).2
+  have hyR := trivFib_of_weq hy (hR_fib y) (r y) (hr_mem y).2
+  exact Relation.EqvGen.trans x (R x) y hxR
+    (Relation.EqvGen.trans (R x) (R y) y hxy (Relation.EqvGen.symm _ _ hyR))
 
 omit [LPCat C] in
 theorem id_mem_W (M : ModelCategory C) (X : C) : M.str.W (𝟙 X) := by
@@ -265,13 +363,57 @@ theorem homotopyInterleavingDist_intrinsic_complete (M : ModelCategory C)
     IsIntrinsicDist (quotientInterleavingDist M.str.W) ∧
       IsCompleteDist (quotientInterleavingDist M.str.W) ∧
       quotientInterleavingDist M.str.W = homotopyInterleavingDist M.str.W := by
-  sorry
+  have : M.str.W.IsMultiplicative := instIsMultiplicativeW M
+  have : (trivialFibrations M.str).IsMultiplicative := instIsMultiplicativeTFib M
+  obtain ⟨hIntT, hCompT⟩ := quotientInterleavingDist_tFib_intrinsic_complete M hpow
+  obtain ⟨hFR1, hFR2, hFR3⟩ := fibrantReplacement_retract M R
+  let dW := quotientInterleavingDist M.str.W
+  let dT := quotientInterleavingDist (trivialFibrations M.str)
+  have hdW : IsEPMetric dW := quotientInterleavingDist_isEPMetric M.str.W
+  have hdT : IsEPMetric dT := quotientInterleavingDist_isEPMetric (trivialFibrations M.str)
+  have hpr : IsPseudoRetract (WithDist dW hdW) (WithDist dT hdT) :=
+    ⟨R.F.toFunctor.obj, id, hFR1, hFR2, fun x => by
+      change dW x (R.F.toFunctor.obj x) = 0
+      exact (hdW.symm x (R.F.toFunctor.obj x)).trans (hFR3 x)⟩
+  refine ⟨?_, ?_, ?_⟩
+  · exact hpr.isIntrinsicEP hIntT
+  · exact hpr.isCompleteEP hCompT
+  · ext x y
+    apply le_antisymm
+    · refine le_iInf₂ fun δ hδ => ?_
+      obtain ⟨x', y', hx', hy', hI⟩ := hδ
+      have hEqW := weaklyEquivalent_equivalence M.str.W
+      have hinv := quotientDist_isInvariant interleavingDist (WeaklyEquivalent M.str.W)
+        hEqW x x' y y' (hEqW.symm hx') (hEqW.symm hy')
+      rw [quotientInterleavingDist, quotientInterleavingDistOf, hinv]
+      exact (quotientDist_le interleavingDist (WeaklyEquivalent M.str.W) x' y').trans
+        (iInf₂_le δ hI)
+    · have h1 : homotopyInterleavingDist M.str.W x y ≤ dT (R.F.toFunctor.obj x) (R.F.toFunctor.obj y) := by
+        dsimp [dT]
+        rw [quotientInterleavingDist_tFib M hpow]
+        refine le_iInf₂ fun δ hδ => ?_
+        obtain ⟨x', y', hx', hy', hI⟩ := hδ
+        have hEqW := weaklyEquivalent_equivalence M.str.W
+        have htFib_le_W : ∀ a b, WeaklyEquivalent (trivialFibrations M.str) a b →
+            WeaklyEquivalent M.str.W a b := fun a b hab => by
+          induction hab with
+          | rel u v huv => obtain ⟨f, hf⟩ := huv; exact Relation.EqvGen.rel u v ⟨f, hf.2⟩
+          | refl u => exact hEqW.refl u
+          | symm u v _ ih => exact hEqW.symm ih
+          | trans u v w _ _ ih1 ih2 => exact hEqW.trans ih1 ih2
+        have hxR : WeaklyEquivalent M.str.W (R.F.toFunctor.obj x) x :=
+          hEqW.symm (Relation.EqvGen.rel x (R.F.toFunctor.obj x) ⟨R.η.app x, R.weq x⟩)
+        have hyR : WeaklyEquivalent M.str.W (R.F.toFunctor.obj y) y :=
+          hEqW.symm (Relation.EqvGen.rel y (R.F.toFunctor.obj y) ⟨R.η.app y, R.weq y⟩)
+        exact iInf₂_le_of_le δ ⟨x', y', hEqW.trans (htFib_le_W _ _ hx') hxR,
+          hEqW.trans (htFib_le_W _ _ hy') hyR, hI⟩ le_rfl
+      exact h1.trans (hFR1 x y)
 
 /-- Theorem 6.1.7: for `M` cofibrantly generated, the quotient interleaving distance of
 `M^ℝ` (projective model structure `N`, with the locally persistent structure of persistent
 objects) is intrinsic, complete, and equals the homotopy interleaving distance. -/
 theorem homotopyInterleavingDist_persistent {C : Type u} [Category.{v} C]
-    (M : ModelCategory C) (hM : IsCofibrantlyGenerated M.str)
+    (M : ModelCategory C) (_hM : IsCofibrantlyGenerated M.str)
     (N : ModelStructure (ℝ ⥤ C)) (hN : IsProjectiveModelStructure M.str N) :
     @IsIntrinsicDist (ℝ ⥤ C)
         (@quotientInterleavingDist (ℝ ⥤ C) _ (persistentLPCat C) N.W) ∧
@@ -279,7 +421,89 @@ theorem homotopyInterleavingDist_persistent {C : Type u} [Category.{v} C]
         (@quotientInterleavingDist (ℝ ⥤ C) _ (persistentLPCat C) N.W) ∧
       @quotientInterleavingDist (ℝ ⥤ C) _ (persistentLPCat C) N.W =
         @homotopyInterleavingDist (ℝ ⥤ C) _ (persistentLPCat C) N.W := by
-  sorry
+  letI : HasLimits C := M.hasLimits
+  letI : HasColimits C := M.hasColimits
+  letI : LPCat (ℝ ⥤ C) := persistentLPCat C
+  letI : PoweredByRepresentables (ℝ ⥤ C) := persistentPowered C
+  letI : CopoweredByRepresentables (ℝ ⥤ C) := persistentCopowered C
+  let M' : ModelCategory (ℝ ⥤ C) := ⟨inferInstance, inferInstance, N⟩
+  have hpow : PowersPreserveTrivialFibrations N := by
+    intro ε X Y f hf
+    have hf' : (projectiveFibrations M.str.Fib) f ∧ (projectiveWeakEquivalences M.str.W) f := by
+      rwa [← hN.Fib_eq, ← hN.W_eq]
+    refine ⟨?_, ?_⟩
+    · rw [hN.Fib_eq]; intro r; exact hf'.1 _
+    · rw [hN.W_eq]; intro r; exact hf'.2 _
+  let termArrow : C ⥤ CategoryTheory.Arrow C :=
+    { obj := fun X => CategoryTheory.Arrow.mk (terminal.from X)
+      map := fun {X Y} f => CategoryTheory.Arrow.homMk f (𝟙 (⊤_ C)) (terminal.hom_ext _ _) }
+  let R₀ : C ⥤ C := termArrow ⋙ M.str.wfs₂.mid
+  let η₀ : 𝟭 C ⟶ R₀ :=
+    { app := fun X => M.str.wfs₂.ι.app (termArrow.obj X)
+      naturality := fun {X Y} f => M.str.wfs₂.ι.naturality (termArrow.map f) }
+  let RFun : LPFunctor (ℝ ⥤ C) (ℝ ⥤ C) :=
+    { toFunctor := (Functor.whiskeringRight ℝ C C).obj R₀
+      map := fun {X Y ε} α =>
+        { app := fun r => R₀.map (α.app r)
+          naturality := fun {r s} h => by
+            change R₀.map (X.map h) ≫ R₀.map (α.app s) =
+              R₀.map (α.app r) ≫ R₀.map ((shift (↑ε) Y).map h)
+            rw [← R₀.map_comp, ← R₀.map_comp]
+            exact congrArg R₀.map (α.naturality h) }
+      map_zero := fun {X Y} f => by
+        apply NatTrans.ext; funext r
+        erw [PersistentObjects.toZero_app (hr := by simp)]
+        change R₀.map (f.app r ≫ Y.map (homOfLE (by simp))) =
+          R₀.map (f.app r) ≫ R₀.map (Y.map (homOfLE (by simp)))
+        exact R₀.map_comp _ _
+      map_comp := fun {X Y Z ε δ} g f => by
+        apply NatTrans.ext; funext r
+        change R₀.map (g.app r ≫ f.app (↑ε + r) ≫ Z.map (homOfLE (by simp [addLeft]; linarith))) =
+          R₀.map (g.app r) ≫ R₀.map (f.app (↑ε + r)) ≫
+            R₀.map (Z.map (homOfLE (by simp [addLeft]; linarith)))
+        rw [R₀.map_comp]
+        congr 1
+        exact R₀.map_comp _ _
+      map_S := fun {X Y ε δ} h f => by
+        apply NatTrans.ext; funext r
+        erw [PersistentObjects.shiftR_app]
+        change R₀.map (f.app r ≫ Y.map _) = R₀.map (f.app r) ≫ R₀.map (Y.map _)
+        exact R₀.map_comp _ _ }
+  let R : LPFibrantReplacement N :=
+    { F := RFun
+      η :=
+        { app := fun X => Functor.whiskerLeft X η₀
+          naturality := fun {X Y} α => by
+            ext r
+            exact η₀.naturality (α.app r) }
+      weq := fun X => by
+        rw [hN.W_eq]
+        intro r
+        have hmem : (M.str.Cof ⊓ M.str.W) (η₀.app (X.obj r)) := by
+          rw [← M.str.wfs₂_L]
+          exact M.str.wfs₂.ι_mem (termArrow.obj (X.obj r))
+        simpa using hmem.2
+      fibrant := fun X T t ht => by
+        rw [hN.Fib_eq]
+        intro r
+        have hp : M.str.Fib (M.str.wfs₂.π.app (termArrow.obj (X.obj r))) := by
+          rw [← M.str.wfs₂_R]
+          exact M.str.wfs₂.π_mem (termArrow.obj (X.obj r))
+        have hT_r : IsTerminal (T.obj r) :=
+          let lim := isLimitOfPreserves ((evaluation ℝ C).obj r) ht
+          IsTerminal.ofUniqueHom
+            (fun Y => lim.lift ⟨Y, fun j => j.as.elim, fun {j} => j.as.elim⟩)
+            (fun Y m => lim.uniq ⟨Y, fun j => j.as.elim, fun {j} => j.as.elim⟩ m
+              (fun j => j.as.elim))
+        let iso : ⊤_ C ≅ T.obj r := terminalIsTerminal.uniqueUpToIso hT_r
+        have ht_eq : t.app r = M.str.wfs₂.π.app (termArrow.obj (X.obj r)) ≫ iso.hom :=
+          hT_r.hom_ext _ _
+        rw [ht_eq]
+        have hFib_eq : M.str.Fib = M.str.wfs₂.L.rlp := by
+          rw [← M.str.wfs₂_R, M.str.wfs₂.R_eq]
+        haveI : M.str.Fib.RespectsIso := by rw [hFib_eq]; infer_instance
+        exact MorphismProperty.RespectsIso.postcomp M.str.Fib iso.hom _ hp }
+  exact homotopyInterleavingDist_intrinsic_complete M' hpow R
 
 end HomotopyInterleaving
 
@@ -1015,7 +1239,11 @@ theorem epMet_coherentFactorizations_compact {P Q : EPMet.{u}} {ε : ℝ≥0} (h
   sorry
 
 /-- Theorem 6.2.20: the quotient interleaving distance of `epMet` is `2 d_GH`, intrinsic and
-complete. -/
+complete.
+
+**Gap (proof gap, Theorem 6.2.20).** The thesis proof relies on Proposition 6.2.18
+(`epMet_coherentFactorizations_compact`), which fails as stated without additional hypotheses
+(such as compactness and passing to the T0 quotient). -/
 theorem epMet_quotientInterleavingDist :
     (∀ P Q : EPMet.{u}, quotientInterleavingDist acyclicEPMet P Q = 2 * gromovHausdorff P Q) ∧
       IsIntrinsicDist (quotientInterleavingDist acyclicEPMet.{u}) ∧
@@ -1023,7 +1251,10 @@ theorem epMet_quotientInterleavingDist :
   sorry
 
 /-- Theorem 6.2.20 (compact case): on compact ep metric spaces, `d_GH` is geodesic and complete,
-and two compact metric spaces at distance zero are isometric. -/
+and two compact metric spaces at distance zero are isometric.
+
+**Gap (proof gap, Theorem 6.2.20).** The thesis proof relies on Proposition 6.2.18
+(`epMet_coherentFactorizations_compact`) to apply Theorem 4.5.16. -/
 theorem epMetc_gromovHausdorff :
     IsGeodesicDist (fun P Q : {P : EPMet.{u} // CompactSpace P.carrier} =>
       gromovHausdorff P.1 Q.1) ∧
@@ -1045,7 +1276,50 @@ theorem gromovHausdorff_universal {Z : Type v} [PseudoEMetricSpace Z] (f : EPMet
     (hacyclic : ∀ (P Q : EPMet.{u}) (a : P ⟶ Q), acyclicEPMet.{u} a → edist (f P) (f Q) = 0) :
     ∀ ε : ℝ≥0∞, 0 < ε → ∃ δ : ℝ≥0∞, 0 < δ ∧ ∀ P Q : EPMet.{u},
       gromovHausdorff P Q < δ → edist (f P) (f Q) ≤ ε := by
-  sorry
+  intro ε hε
+  obtain ⟨δ, hδ_pos, hδ⟩ := hmetric ε hε
+  refine ⟨min (δ / 2) 1, lt_min (ENNReal.div_pos hδ_pos.ne' (by norm_num)) one_pos, ?_⟩
+  intro P Q hPQ
+  have h2PQ : 2 * gromovHausdorff P Q < δ := by
+    have hlt : gromovHausdorff P Q < δ / 2 := lt_of_lt_of_le hPQ (min_le_left _ _)
+    calc 2 * gromovHausdorff P Q = gromovHausdorff P Q + gromovHausdorff P Q := two_mul _
+      _ < δ / 2 + δ / 2 := ENNReal.add_lt_add hlt hlt
+      _ = 2 * (δ / 2) := (two_mul _).symm
+      _ ≤ δ := ENNReal.mul_div_le
+  have hsInf : sInf {r | ∃ R : Set (P.carrier × Q.carrier), IsCorrespondence R ∧ r = distortion R} < δ :=
+    lt_of_le_of_lt sInf_distortion_le_two_mul_gromovHausdorff h2PQ
+  obtain ⟨r, ⟨R, hR, rfl⟩, hdist⟩ := sInf_lt_iff.mp hsInf
+  let d₁ : R → R → ℝ≥0∞ := fun p q => edist p.1.1 q.1.1
+  let d₂ : R → R → ℝ≥0∞ := fun p q => edist p.1.2 q.1.2
+  have h₁ : IsEPMetric d₁ :=
+    ⟨fun p => edist_self p.1.1, fun p q => edist_comm p.1.1 q.1.1,
+     fun p q s => edist_triangle p.1.1 q.1.1 s.1.1⟩
+  have h₂ : IsEPMetric d₂ :=
+    ⟨fun p => edist_self p.1.2, fun p q => edist_comm p.1.2 q.1.2,
+     fun p q s => edist_triangle p.1.2 q.1.2 s.1.2⟩
+  have hdist_le : ∀ x y : R, (d₁ x y - d₂ x y) ⊔ (d₂ x y - d₁ x y) ≤ δ := by
+    intro x y
+    refine sup_le ?_ ?_
+    · exact le_trans (tsub_le_iff_left.mpr (by
+        simpa [d₁, d₂, add_comm] using edist_le_edist_add_distortion x.2 y.2)) hdist.le
+    · exact le_trans (tsub_le_iff_left.mpr (by
+        simpa [d₁, d₂, add_comm] using edist_le_edist_add_distortion' x.2 y.2)) hdist.le
+  let P' := epMetOfDist d₁ h₁
+  let Q' := epMetOfDist d₂ h₂
+  let a : P' ⟶ P := ⟨fun p => p.1.1, fun _ _ => le_rfl⟩
+  let b : Q' ⟶ Q := ⟨fun p => p.1.2, fun _ _ => le_rfl⟩
+  have ha : acyclicEPMet a := ⟨fun x => let ⟨y, hy⟩ := hR.1 x; ⟨⟨(x, y), hy⟩, rfl⟩, fun _ _ => rfl⟩
+  have hb : acyclicEPMet b := ⟨fun y => let ⟨x, hx⟩ := hR.2 y; ⟨⟨(x, y), hx⟩, rfl⟩, fun _ _ => rfl⟩
+  have h1 : edist (f P) (f P') = 0 := by
+    rw [edist_comm]
+    exact hacyclic P' P a ha
+  have h2 : edist (f Q') (f Q) = 0 := hacyclic Q' Q b hb
+  have h12 : edist (f P') (f Q') ≤ ε := hδ R d₁ d₂ h₁ h₂ hdist_le
+  calc edist (f P) (f Q) ≤ edist (f P) (f P') + edist (f P') (f Q) := edist_triangle _ _ _
+    _ ≤ edist (f P) (f P') + (edist (f P') (f Q') + edist (f Q') (f Q)) :=
+        add_le_add le_rfl (edist_triangle _ _ _)
+    _ = edist (f P') (f Q') := by rw [h1, h2, zero_add, add_zero]
+    _ ≤ ε := h12
 
 /-- Definition 6.2.22: a pseudo isometry is a map `f : P → Q` that is an isometry onto the
 associated metric spaces: distance preserving and with dense... here, distance preserving and
@@ -1375,16 +1649,21 @@ abbrev acyclicPersistentDiss : MorphismProperty (ℝ ⥤ Diss.{u}) := levelwiseP
 /-- Definition 6.4.3 / Proposition 6.4.4: the Gromov–Hausdorff-interleaving distance (the
 quotient interleaving distance of `Diss^ℝ_v`, for any locally persistent structure `L` obtained
 by change of enrichment along `v`) is intrinsic and complete, and is an infimum over interleavings
-of acyclic covers. -/
-theorem ghInterleaving_spec (LR : LQPCat (ℝ≥0 × ℝ≥0) (ℝ ⥤ Diss.{u})) (v : ℝ≥0 × ℝ≥0)
-    (L : LPCat (ℝ ⥤ Diss.{u})) (hL : IsChangeOfEnrichment (pairFamily v) LR L) :
+of acyclic covers.
+
+**Change.** Specializes the locally `(ℝ≥0 × ℝ≥0)`-persistent structure from an arbitrary `LR` to
+`persistentLQPCat Diss.{u}` so `persistent_quotient_dist` applies. -/
+theorem ghInterleaving_spec (v : ℝ≥0 × ℝ≥0)
+    (L : LPCat (ℝ ⥤ Diss.{u})) (hL : IsChangeOfEnrichment (pairFamily v) (persistentLQPCat Diss.{u}) L) :
     @IsIntrinsicDist (ℝ ⥤ Diss.{u}) (@quotientInterleavingDist _ _ L acyclicPersistentDiss) ∧
     @IsCompleteDist (ℝ ⥤ Diss.{u}) (@quotientInterleavingDist _ _ L acyclicPersistentDiss) ∧
     ∀ X Y : ℝ ⥤ Diss.{u}, @quotientInterleavingDist _ _ L acyclicPersistentDiss X Y =
       ⨅ (δ : ℝ≥0) (_ : ∃ (X' Y' : ℝ ⥤ Diss.{u}) (a : X' ⟶ X) (b : Y' ⟶ Y),
         acyclicPersistentDiss a ∧ acyclicPersistentDiss b ∧ @IsInterleaved _ _ L X' Y' δ),
-        (δ : ℝ≥0∞) := by
-  sorry
+        (δ : ℝ≥0∞) :=
+  persistent_quotient_dist (C := Diss.{u}) acyclicDiss Diss.powered
+    (fun _ => inferInstance) (fun _ => inferInstance) (fun _ => inferInstance)
+    hpow_acyclicDiss Diss.isClosedUnderSequentialLimits_acyclicDiss v L hL
 
 /-! #### 6.4.2 Filtered metric spaces -/
 
@@ -1416,7 +1695,15 @@ def FFMet.sublevel (X : FFMet) : ℝ ⥤ Diss.{0} where
   map_comp := by intros; rfl
 
 /-- Theorem 6.4.6: for `v = (1, 1)`, the Gromov–Hausdorff-interleaving distance of the
-sublevel filtrations is `D(X, Y)`. -/
+sublevel filtrations is `D(X, Y)`.
+
+**Gap (proof gap, Theorem 6.4.6).** In the `≥` direction, Scoccola's proof (p. 142) claims
+that if `y'' ∈ T(r')` (`r' < r - ε`) maps to the same point `y ∈ Y` as `φ(x') ∈ T(r + ε)`, then
+`y''` maps to `φ(x')` under `T(r') → T(r + ε)`. This fails when `T` is an arbitrary `Diss`-valued
+persistence module with distinct points at distance `0` (counterexample: `X = {x₁, x}` with
+`d(x₁, x) = 1`, `f_X(x₁) = 0`, `f_X(x) = 10`, and `Y = {y}` with `f_Y(y) = 0`, which gives
+`D(X, Y) = 10` while `X.sublevel` and `Y.sublevel` are `1`-interleaved via an acyclic cover `Y'`
+splitting `y` into two distance-`0` points at `r = 9`). -/
 theorem ghInterleaving_eq_filteredDist (LR : LQPCat (ℝ≥0 × ℝ≥0) (ℝ ⥤ Diss.{0}))
     (L : LPCat (ℝ ⥤ Diss.{0})) (hL : IsChangeOfEnrichment (pairFamily (1, 1)) LR L)
     (X Y : FFMet) :
@@ -1428,16 +1715,102 @@ theorem ghInterleaving_eq_filteredDist (LR : LQPCat (ℝ≥0 × ℝ≥0) (ℝ �
 
 /-- Theorem 6.4.7: applying `|VR|` levelwise, `Diss^ℝ_v → (Top^ℝ)^ℝ_v`, is 1-Lipschitz for the
 Gromov–Hausdorff-interleaving distance and the quotient interleaving distance of bi-persistent
-topological spaces (levelwise weak equivalences). -/
+topological spaces (levelwise weak equivalences).
+
+**Change.** Adds `v : ℝ≥0 × ℝ≥0` and hypotheses `hL₁`, `hL₂` witnessing that the `LPCat`
+structures on `ℝ ⥤ Diss` and `ℝ ⥤ (ℝ ⥤ TopCat)` arise by change of enrichment along `pairFamily v`
+from `persistentLQPCat` (using `persistentLPCat TopCat` on `ℝ ⥤ TopCat`), instead of unrelated
+arbitrary `LPCat` instances. -/
 theorem vrStar_lipschitz (real : SCpx.{u} ⥤ TopCat.{u}) (Wtop : MorphismProperty TopCat.{u})
-    (h : RealizationInvertsFullSurjections real Wtop)
-    [LPCat (ℝ ⥤ Diss.{u})] [LPCat (ℝ ⥤ TopCat.{u})] [LPCat (ℝ ⥤ (ℝ ⥤ TopCat.{u}))] :
+    (h : RealizationInvertsFullSurjections real Wtop) (v : ℝ≥0 × ℝ≥0)
+    [L₁ : LPCat (ℝ ⥤ Diss.{u})]
+    [L₂ : LPCat (ℝ ⥤ (ℝ ⥤ TopCat.{u}))]
+    (hL₁ : IsChangeOfEnrichment (pairFamily v) (persistentLQPCat Diss.{u}) L₁)
+    (hL₂ : IsChangeOfEnrichment (pairFamily v)
+      (@persistentLQPCat (ℝ ⥤ TopCat.{u}) _ (persistentLPCat TopCat.{u})) L₂) :
     ∃ Φ : LPFunctor (ℝ ⥤ Diss.{u}) (ℝ ⥤ (ℝ ⥤ TopCat.{u})),
       Φ.toFunctor = (Functor.whiskeringRight ℝ Diss.{u} (ℝ ⥤ TopCat.{u})).obj (vrTop real) ∧
       ∀ X Y : ℝ ⥤ Diss.{u},
         quotientInterleavingDist (levelwiseProp (levelwiseProp Wtop)) (Φ.toFunctor.obj X)
           (Φ.toFunctor.obj Y) ≤ quotientInterleavingDist acyclicPersistentDiss X Y := by
-  sorry
+  letI : LPCat (ℝ ⥤ TopCat.{u}) := persistentLPCat TopCat.{u}
+  obtain ⟨F, hF_eq, _⟩ := vr_lipschitz real Wtop h
+  let LQ₁ := persistentLQPCat Diss.{u}
+  let LQ₂ := persistentLQPCat (ℝ ⥤ TopCat.{u})
+  obtain ⟨e₁, hz₁, hc₁, hs₁⟩ := hL₁
+  obtain ⟨e₂, hz₂, hc₂, hs₂⟩ := hL₂
+  let mapPH : ∀ {X Y : ℝ ⥤ Diss.{u}} {a b : ℝ≥0},
+      PersistentHom X Y a b → PersistentHom (X ⋙ F.toFunctor) (Y ⋙ F.toFunctor) a b :=
+    fun {X Y a b} α =>
+      ⟨fun r => F.map (α.1 r), fun r s hrs => by
+        have hnat := congrArg F.map (α.2 r s hrs)
+        rw [F.map_S, F.map_S, F.map_comp, F.map_comp, F.map_zero, F.map_zero] at hnat
+        exact hnat⟩
+  have cast_symm_eq : ∀ {α β : Type _} (he : α = β) {x : β} {y : α},
+      cast he.symm x = y ↔ x = cast he y := by
+    intro α β he x y; subst he; rfl
+  have mapPH_S : ∀ {X Y : ℝ ⥤ Diss.{u}} {a₁ a₂ b₁ b₂ : ℝ≥0} (ha : a₁ ≤ a₂) (hb : b₁ ≤ b₂)
+      (α : PersistentHom X Y a₁ b₁),
+      mapPH (LQ₁.S (ε := (a₁, b₁)) (δ := (a₂, b₂)) ⟨ha, hb⟩ α) =
+        LQ₂.S (ε := (a₁, b₁)) (δ := (a₂, b₂)) ⟨ha, hb⟩ (mapPH α) := by
+    intro X Y a₁ a₂ b₁ b₂ ha hb α
+    apply Subtype.ext; funext r
+    dsimp only [LQ₁, LQ₂, persistentLQPCat, pSH, pS, mapPH]
+    erw [F.map_S, F.map_comp, F.map_zero]
+    rfl
+  let Φ : LPFunctor (ℝ ⥤ Diss.{u}) (ℝ ⥤ (ℝ ⥤ TopCat.{u})) :=
+    { toFunctor := (Functor.whiskeringRight ℝ Diss.{u} (ℝ ⥤ TopCat.{u})).obj F.toFunctor
+      map := fun {X Y ε} f => cast (e₂ _ _ ε).symm (mapPH (cast (e₁ X Y ε) f))
+      map_zero := fun {X Y} f => by
+        refine (cast_symm_eq (e₂ _ _ 0)).mpr ?_
+        rw [hz₂]
+        erw [congrArg mapPH (hz₁ X Y f),
+          mapPH_S (le_of_eq (pairFamily v).map_zero.symm).1
+            (le_of_eq (pairFamily v).map_zero.symm).2]
+        congr 1
+        apply Subtype.ext; funext r
+        dsimp only [LQ₁, LQ₂, persistentLQPCat, pZeroH, pZero, mapPH]
+        erw [F.map_zero, F.toFunctor.map_comp]
+        rfl
+      map_comp := fun {X Y Z ε δ} g f => by
+        refine (cast_symm_eq (e₂ _ _ (ε + δ))).mpr ?_
+        rw [hc₂]
+        erw [congrArg mapPH (hc₁ X Y Z ε δ f g),
+          mapPH_S ((pairFamily v).superadd ε δ).1 ((pairFamily v).superadd ε δ).2]
+        congr 1
+        apply Subtype.ext; funext r
+        have hcc : ∀ {α β : Type _} (he : α = β) (x : β), cast he (cast he.symm x) = x := by
+          intro α β he x; subst he; rfl
+        dsimp only [mapPH]
+        erw [hcc (e₂ _ _ δ), hcc (e₂ _ _ ε), F.map_S, F.map_comp, F.map_comp, F.map_zero]
+        rfl
+      map_S := fun {X Y ε δ} h f => by
+        refine (cast_symm_eq (e₂ _ _ δ)).mpr ?_
+        rw [hs₂]
+        erw [congrArg mapPH (hs₁ X Y ε δ h f),
+          mapPH_S ((pairFamily v).mono h).1 ((pairFamily v).mono h).2]
+        congr 1
+        apply Subtype.ext; funext r
+        have hcc : ∀ {α β : Type _} (he : α = β) (x : β), cast he (cast he.symm x) = x := by
+          intro α β he x; subst he; rfl
+        dsimp only [mapPH]
+        erw [hcc (e₂ _ _ ε)]
+        rfl }
+  refine ⟨Φ, by simp [Φ, hF_eq], fun X Y => ?_⟩
+  refine quotientDist_map_le _ _ interleavingDist_isEPMetric interleavingDist_isEPMetric
+    Φ.toFunctor.obj (fun a b => Φ.interleavingDist_le a b) _ _
+    (weaklyEquivalent_equivalence _) (weaklyEquivalent_equivalence _) (fun a b hab => ?_) X Y
+  induction hab with
+  | rel a b hrel =>
+    obtain ⟨α, hα⟩ := hrel
+    refine Relation.EqvGen.rel _ _ ⟨Φ.toFunctor.map α, fun r q => ?_⟩
+    have hvr := vr_maps_acyclic real Wtop h (α.app r) (hα r) q
+    change Wtop ((F.toFunctor.map (α.app r)).app q)
+    rw [hF_eq]
+    exact hvr
+  | refl a => exact Relation.EqvGen.refl _
+  | symm _ _ _ ih => exact Relation.EqvGen.symm _ _ ih
+  | trans _ _ _ _ _ ih1 ih2 => exact Relation.EqvGen.trans _ _ _ ih1 ih2
 
 end Filtrations
 

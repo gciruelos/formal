@@ -35,7 +35,8 @@ import tomllib
 
 LEAN_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = LEAN_ROOT / "scripts" / "proof_stats.lean"
-INTERESTINGNESS = "Most interesting result ([interestingness](https://arxiv.org/abs/2609.28603))"
+METRIC_VERSION = 3
+PROOF_DEPENDENCY_RATIO = "Max proof dependency footprint"
 # Gap kinds, most serious first, with the severity shown in the README.
 GAP_SEVERITY = {"error": "high", "missing hypothesis": "high", "proof gap": "medium",
                 "unproved": "medium", "imprecise": "low", "typo": "low"}
@@ -206,13 +207,39 @@ def lean_stats(p: Project) -> dict:
     if len(payload) != 1:
         raise RuntimeError(f"unexpected output from proof_stats.lean:\n{out}")
     data = json.loads(payload[0])
+    validate_measurement(data)
     (LEAN_ROOT / ".lake" / f"stats_{p.lib}.json").write_text(json.dumps(data))
     return data
 
 
+def validate_measurement(data: dict) -> None:
+    """Reject old scores or inconsistent attribution before caching/publishing them."""
+    if data.get("metric_version") != METRIC_VERSION:
+        raise RuntimeError("outdated proof-dependency measurement; regenerate statistics")
+    for module in data["modules"]:
+        if not module["max_ratio"]["proof"]:
+            continue
+        attribution = module["max_ratio_attribution"]
+        for side in ("proof", "statement"):
+            row = attribution[side]
+            expected = module["max_ratio"][side]
+            for fields in (("project", "mathlib", "lean", "other"),
+                           ("types", "proofs", "definitions", "rules")):
+                if sum(row[key] for key in fields) != expected:
+                    raise RuntimeError(f"inconsistent {side} attribution: {module['module']}")
+            if any(c["size"] > expected for c in row["top"]):
+                raise RuntimeError(f"invalid contributor: {module['module']}")
+
+
 def cached_stats(p: Project) -> dict | None:
     f = LEAN_ROOT / ".lake" / f"stats_{p.lib}.json"
-    return json.loads(f.read_text()) if f.exists() else None
+    if not f.exists():
+        return None
+    data = json.loads(f.read_text())
+    if data.get("metric_version") != METRIC_VERSION:
+        return None
+    validate_measurement(data)
+    return data
 
 
 def short(name: str, p: Project) -> str:
@@ -335,23 +362,22 @@ def dag_cell(m: dict | None, kind: str, p: Project) -> str:
     return f"{m[f'max_{kind}_dag']:,} (<code>{html.escape(short(m[f'max_{kind}_name'], p))}</code>)"
 
 
-def interestingness(m: dict | None) -> Fraction:
+def dependency_ratio(m: dict | None) -> Fraction:
     sizes = m.get("max_ratio") if m else None
     return Fraction(sizes["proof"], sizes["statement"]) if sizes else Fraction(0)
 
 
-def interestingness_cell(m: dict | None, path: str, p: Project) -> str:
-    ratio = interestingness(m)
-    if not ratio:
+def dependency_ratio_cell(m: dict | None, path: str, p: Project) -> str:
+    if not dependency_ratio(m):
         return "—"
     name = html.escape(short(m["max_ratio_name"], p))
-    return f"[<code>{name}</code>]({path}#L{m['max_ratio_line']}) ({float(ratio):,.2f})"
+    return f"[<code>{name}</code>]({path}#L{m['max_ratio_line']})"
 
 
 def stats_block(p: Project) -> str:
     lean = {m["module"]: m for m in (p.lean or {}).get("modules", [])}
     rows = ["| Prefix | File | Lines | Statements | Defs | Types | `sorry`s | "
-            f"Max statement DAG (statement) | Max proof DAG (proof) | {INTERESTINGNESS} | Theorems with `sorry` |",
+            f"Max statement DAG (statement) | Max proof DAG (proof) | {PROOF_DEPENDENCY_RATIO} | Theorems with `sorry` |",
             "|:---|:---|---:|---:|---:|---:|---:|:---|:---|:---|:---|"]
     tot = Counter()
     best = {"statement": (0, None), "proof": (0, None)}
@@ -375,7 +401,7 @@ def stats_block(p: Project) -> str:
         vals = [c[k] for k in ("lines", "statements", "defs", "types", "sorry")]
         rows.append(f"| {cell} | [{suffix}]({rel}) | " + " | ".join(f"{v:,}" for v in vals)
                     + f" | {dag_cell(m, 'statement', p)} | {dag_cell(m, 'proof', p)}"
-                    + f" | {interestingness_cell(m, rel, p)} | {names} |")
+                    + f" | {dependency_ratio_cell(m, rel, p)} | {names} |")
     vals = [tot[k] for k in ("lines", "statements", "defs", "types", "sorry")]
     mx = [f"**{best[k][0]:,}** (<code>{html.escape(short(best[k][1][f'max_{k}_name'], p))}</code>)"
           if best[k][1] else "—" for k in ("statement", "proof")]
@@ -397,8 +423,16 @@ module appears last.
 - **Max statement DAG (statement)** is the size of the largest elaborated theorem type;
   **Max proof DAG (proof)** the largest theorem body (hash-consed expression DAG), each with
   the declaration's name. Both include compiler-generated theorems.
-- **Most interesting result** shows the highest proof DAG size divided by statement DAG size among
-  sorry-free user-written theorems in the file. The name links to the Lean statement.
+- **Max proof dependency footprint** shows the highest absolute proof/vocabulary DAG ratio among
+  sorry-free user-written theorems in the file, excluding projections, Lean-recognized
+  automatic declarations and names absent from their reported source location. Each cell links to the selected theorem.
+  This measures the chosen proof's dependency footprint, not mathematical value or shortest-proof
+  complexity. Both sides recursively include dependencies
+  from the work, Mathlib and Lean, counting each declaration once per side. The numerator
+  expands proof bodies, dependency types and definitions; the denominator expands the statement
+  and its vocabulary (including definition bodies, but excluding theorem proofs). Inductive
+  constructors and recursor rules count too. Expression DAG sizes are summed per declaration;
+  axioms contribute their types but no proof bodies. The name links to the Lean statement.
 - **Theorems with `sorry`** lists declarations (of any kind) whose own term contains `sorryAx`.
 
 Generated by [`scripts/update_stats.py`](../scripts/update_stats.py)."""
@@ -418,17 +452,13 @@ def index_row(p: Project) -> str:
     open_gaps = sum(1 for g in gaps if gap_status(g, p).startswith("open"))
     tot = sum(x["theorems"] for x in (p.lean or {}).get("modules", []))
     free = tot - sum(len(x["sorry_dependent"]) for x in (p.lean or {}).get("modules", []))
-    modules = {x["module"]: x for x in (p.lean or {}).get("modules", [])}
-    best = max(p.files, key=lambda f: interestingness(modules.get(p.module(f))), default=None)
-    score = (interestingness_cell(modules.get(p.module(best)), best.relative_to(LEAN_ROOT).as_posix(), p)
-             if best else "—")
     return (f"| [{p.name}]({p.name}/README.md) | {work} | {m.get('scope', '')} | {c['lines']:,} | "
-            f"{free}/{tot} | {c['sorry']} | {proved}/{len(mains)} | {len(gaps)} ({open_gaps} open) | {score} |")
+            f"{free}/{tot} | {c['sorry']} | {proved}/{len(mains)} | {len(gaps)} ({open_gaps} open) |")
 
 
 def index_block(projects: list[Project]) -> str:
     rows = ["| Project | Work | Scope | Lines | Sorry-free theorems | `sorry` | Main results proved "
-            f"| Gaps found | {INTERESTINGNESS} |", "|:---|:---|:---|---:|---:|---:|---:|---:|:---|"]
+            "| Gaps found |", "|:---|:---|:---|---:|---:|---:|---:|---:|"]
     rows += [index_row(p) for p in projects]
     return "\n".join(rows)
 
