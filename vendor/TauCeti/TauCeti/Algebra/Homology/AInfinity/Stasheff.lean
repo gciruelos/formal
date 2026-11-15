@@ -1,0 +1,583 @@
+/-
+Copyright (c) 2026 The Tau Ceti contributors. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: The Tau Ceti contributors
+-/
+module
+
+public import Mathlib.Algebra.BigOperators.Ring.Finset
+import Mathlib.Algebra.BigOperators.Intervals
+import Mathlib.Tactic.LinearCombination
+import Mathlib.Tactic.Ring
+public import TauCeti.LinearAlgebra.Graded.Insertion
+public import TauCeti.LinearAlgebra.Graded.Shift
+
+/-!
+# The Stasheff identities and the suspension sign
+
+An `A∞` algebra has operations `mₙ : A^{⊗ n} ⟶ A` of degree `2 - n` subject to the Stasheff
+identities: for every `n`,
+
+```text
+∑_{n = r + s + t, s ≥ 1} (-1) ^ (r + s * t) m_{r + 1 + t} (1^{⊗ r} ⊗ m_s ⊗ 1^{⊗ t}) = 0.  (SIₙ)
+```
+
+The primary encoding of these identities is the suspended one: writing `sA` for the shift of `A`
+and `bₙ` for the operations associated to `mₙ`, every `bₙ` has degree one and the identities lose
+their structural coefficient,
+
+```text
+∑_{n = r + s + t, s ≥ 1} b_{r + 1 + t} (1^{⊗ r} ⊗ b_s ⊗ 1^{⊗ t}) = 0.
+```
+
+This file constructs both sums and proves that they agree up to one global sign, so that either
+vanishes exactly when the other does.  Following the cited Getzler--Jones/Keller convention, the
+definition adopts the sign prescribed by the Koszul rule for the suspension square: because `s`
+has degree `-1`, its tensor power contributes
+`(-1) ^ (∑ i, (n - 1 - i) * d i)`.  The tensor power itself is not formalized here.  Its exponent
+is `MultilinearMap.suspExp`, and `TauCeti.AInfinity.suspendedStasheffTerm_eq_smul` proves that the
+two corresponding Stasheff terms differ by this same sign for every decomposition `n = p + s + t`.
+
+Both sides also carry the Koszul coefficient of the inserted operation crossing the prefix
+inputs, `(-1) ^ ((2 - s) * (d 0 + ⋯ + d (r - 1)))` before suspension and
+`(-1) ^ ((d 0 - 1) + ⋯ + (d (r - 1) - 1))` after; these are the coefficients of
+`MultilinearMap.koszulSign`. As in
+`TauCeti/LinearAlgebra/Graded/Insertion.lean`, the degrees of the inputs are supplied as an
+explicit parameter rather than read off a direct-sum decomposition; on the intended component the
+sign is a scalar, and `TauCeti.AInfinity.replaceBlock_mem_replaceDeg_of_mem_blockDeg` proves that
+the supplied degrees are the actual ones once the inputs and the inserted value are homogeneous of
+the recorded degrees.
+
+The arities one to four are written out on the nose using the supplied degree family `d`; these
+formulas themselves make no homogeneity assumption. Homogeneity enters only in
+`evalNat_mem_blockDeg` and `replaceBlock_mem_replaceDeg_of_mem_blockDeg`.
+The degeneration to a differential graded algebra is also checked.
+
+Inputs are indexed by `ℕ` rather than by `Fin n` throughout; only the first `n` entries of an input
+family are read, and this keeps the reindexing of the Stasheff sums free of transports between
+propositionally equal arities.
+
+## Main definitions
+
+* `TauCeti.AInfinity.blockDeg` and `TauCeti.AInfinity.replaceDeg`: record the degree resulting from
+  collapsing an input block.
+* `TauCeti.AInfinity.stasheffTerm` and `TauCeti.AInfinity.suspendedStasheffTerm`: the `(p, s, t)`
+  term of the unsuspended and suspended Stasheff identities.
+* `TauCeti.AInfinity.stasheffSum` and `TauCeti.AInfinity.suspendedStasheffSum`: the two sides of
+  `(SIₙ)`.
+
+## Main results
+
+* `TauCeti.AInfinity.suspExp_replaceDeg`: the sign identity behind the whole comparison; the two
+  exponents differ by the suspension sign of the whole arity, up to an even number.
+* `TauCeti.AInfinity.suspendedStasheffTerm_eq_smul` and
+  `TauCeti.AInfinity.suspendedStasheffSum_eq_smul`: a suspended term, and hence the suspended sum,
+  is the unsuspended one scaled by that sign.
+* `TauCeti.AInfinity.suspendedStasheffSum_eq_zero_iff`: the suspended identity free of the
+  structural coefficient `(-1) ^ (r + s * t)` holds exactly when the unsuspended identity does.
+* `TauCeti.AInfinity.stasheffTerm_eq_zero_of_inner_eq_zero`,
+  `TauCeti.AInfinity.stasheffTerm_eq_zero_of_outer_eq_zero` and
+  `TauCeti.AInfinity.stasheffTerm_of_even`: a term vanishes with either of its operations, and an
+  even inner arity `s` leaves only the sign `(-1) ^ p`.
+* `TauCeti.AInfinity.sum_stasheff_reflect`: the reflection `(p, s, t) ↦ (t, s, p)` of the
+  decompositions indexing a Stasheff sum.
+* `TauCeti.AInfinity.stasheffSum_one`, `TauCeti.AInfinity.stasheffSum_two`,
+  `TauCeti.AInfinity.stasheffSum_three` and `TauCeti.AInfinity.stasheffSum_four`: the four
+  identities written out using the supplied degree family.
+* `TauCeti.AInfinity.stasheffSum_two_eq_zero_iff`,
+  `TauCeti.AInfinity.stasheffSum_three_eq_zero_iff_of_m_three_eq_zero` and
+  `TauCeti.AInfinity.stasheffSum_four_eq_zero_of_m_three_eq_zero_of_m_four_eq_zero`: the
+  differential graded degeneration.
+
+The unsuspended terms, sums, and low-arity formulas work over any ring. Commutativity of the
+ground ring is used for the signed multilinear maps in the suspension and one-slot substitution
+comparisons.
+
+## References
+
+* E. Getzler and J. D. S. Jones, *A-infinity algebras and the cyclic bar complex*, Sections 1--2,
+  for the suspension and brace signs.
+* B. Keller, *Introduction to A-infinity algebras and modules*, Sections 3.1 and 3.6, for the
+  degree `2 - n`, the coefficient `(-1) ^ (r + s * t)` and the degree `-1` suspension.
+-/
+
+public section
+
+open scoped BigOperators
+open _root_.MultilinearMap
+open TauCeti.MultilinearMap
+
+universe uR uA
+
+namespace TauCeti
+
+namespace AInfinity
+
+open TauCeti
+open _root_.MultilinearMap
+
+variable {R : Type uR} {A : Type uA}
+
+/-! ### The degrees of a substituted tuple -/
+
+section Degrees
+
+/-- The degree of the value of an arity-`s` operation of degree `2 - s` on the block of inputs of
+degrees `d` at position `p`. -/
+def blockDeg (d : ℕ → ℤ) (p s : ℕ) : ℤ := (∑ j ∈ Finset.range s, d (p + j)) + 2 - s
+
+/-- The defining expression for the degree of a collapsed block. -/
+theorem blockDeg_def (d : ℕ → ℤ) (p s : ℕ) :
+    blockDeg d p s = (∑ j ∈ Finset.range s, d (p + j)) + 2 - s := (rfl)
+
+/-- The degrees of the inputs of the outer operation of a Stasheff term: the block of `s` degrees
+at position `p` is replaced by the degree of the value of the inner operation on it. -/
+def replaceDeg (d : ℕ → ℤ) (p s : ℕ) : ℕ → ℤ := replaceBlock d p s (blockDeg d p s)
+
+@[simp]
+theorem replaceDeg_of_lt (d : ℕ → ℤ) (p s : ℕ) {i : ℕ} (h : i < p) :
+    replaceDeg d p s i = d i := by rw [replaceDeg, replaceBlock_of_lt _ _ _ _ h]
+
+@[simp]
+theorem replaceDeg_self (d : ℕ → ℤ) (p s : ℕ) :
+    replaceDeg d p s p = blockDeg d p s := by rw [replaceDeg, replaceBlock_self]
+
+@[simp]
+theorem replaceDeg_of_gt (d : ℕ → ℤ) (p s : ℕ) {i : ℕ} (h : p < i) :
+    replaceDeg d p s i = d (i + s - 1) := by rw [replaceDeg, replaceBlock_of_gt _ _ _ _ h]
+
+/-- **The suspension sign identity.**  Writing an arity of `p + s + t` as a prefix of length `p`,
+an inner block of length `s` and a suffix of length `t`, the exponent collected on the suspended
+side of a Stasheff term -- the Koszul sign of the degree-one operation `b_s` crossing the
+suspended prefix, plus the two suspension signs of `b_s` and of the outer `b_{p+1+t}` -- differs
+from the exponent collected on the unsuspended side -- the structural coefficient `(-1) ^ (p + st)`
+and the Koszul sign of `m_s` crossing the prefix -- by the suspension sign of the whole arity,
+up to an even number.
+
+This is the computation which turns the suspended identity without the structural coefficient
+into the identity with the coefficient `(-1) ^ (r + s * t)`. -/
+theorem suspExp_replaceDeg (d : ℕ → ℤ) (p s t : ℕ) :
+    suspExp (p + 1 + t) (replaceDeg d p s) =
+      ((p : ℤ) + s * t + (2 - s) * ∑ i ∈ Finset.range p, d i)
+        + suspExp (p + s + t) d + 2 * ((t : ℤ) - p - s * t)
+        - (∑ i ∈ Finset.range p, (d i - 1)) - suspExp s (fun j ↦ d (p + j)) := by
+  -- Expand the suspension exponent after the inner block has been collapsed.
+  have hA : suspExp (p + 1 + t) (replaceDeg d p s)
+      = ((∑ i ∈ Finset.range p, ((p : ℤ) + t - i) * d i) + (t : ℤ) * blockDeg d p s)
+        + ∑ j ∈ Finset.range t, ((t : ℤ) - 1 - j) * d (p + s + j) := by
+    rw [suspExp_add (p + 1) t, Finset.sum_range_succ]
+    refine congrArg₂ (· + ·) (congrArg₂ (· + ·) ?_ ?_) ?_
+    · refine Finset.sum_congr rfl fun i hi ↦ ?_
+      rw [replaceDeg_of_lt _ _ _ (Finset.mem_range.1 hi)]
+      push_cast
+      ring
+    · rw [replaceDeg_self]
+      push_cast
+      ring
+    · refine Finset.sum_congr rfl fun j _ ↦ ?_
+      have hindex : p + 1 + j + s - 1 = p + s + j := by omega
+      rw [replaceDeg_of_gt _ _ _ (by omega), hindex]
+  -- Split the exponent of the original tuple into prefix, inner block, and suffix.
+  have hB := suspExp_add3 p s t d
+  -- Compare the prefix contribution on the two sides of the sign identity.
+  have hI : (∑ i ∈ Finset.range p, (d i - 1)) + ∑ i ∈ Finset.range p, ((p : ℤ) + t - i) * d i
+      = ((2 - (s : ℤ)) * ∑ i ∈ Finset.range p, d i
+          + ∑ i ∈ Finset.range p, ((p : ℤ) + s + t - 1 - i) * d i) - p := by
+    have hcard : ((p : ℤ)) = ∑ _i ∈ Finset.range p, (1 : ℤ) := by simp
+    rw [eq_sub_iff_add_eq, Finset.mul_sum, ← Finset.sum_add_distrib, ← Finset.sum_add_distrib,
+      hcard, ← Finset.sum_add_distrib]
+    exact Finset.sum_congr rfl fun i _ ↦ by ring
+  -- Compare the collapsed inner-block contribution on the two sides.
+  have hII : suspExp s (fun j ↦ d (p + j)) + (t : ℤ) * blockDeg d p s
+      = (∑ j ∈ Finset.range s, ((t : ℤ) + s - 1 - j) * d (p + j)) + (t : ℤ) * (2 - s) := by
+    have hsum : (∑ j ∈ Finset.range s, ((t : ℤ) + s - 1 - j) * d (p + j))
+        = (∑ j ∈ Finset.range s, ((s : ℤ) - 1 - j) * d (p + j))
+          + (t : ℤ) * ∑ j ∈ Finset.range s, d (p + j) := by
+      rw [Finset.mul_sum, ← Finset.sum_add_distrib]
+      exact Finset.sum_congr rfl fun j _ ↦ by ring
+    rw [hsum, suspExp_def, blockDeg_def]
+    ring
+  rw [hA, hB]
+  linear_combination hI + hII
+
+end Degrees
+
+/-! ### The Stasheff identities -/
+
+/-- Pass between the decompositions `p + s + t` and `t + s + p` of an arity-`n` Stasheff sum. -/
+theorem sum_stasheff_reflect {M : Type*} [AddCommMonoid M] (n : ℕ)
+    (f : ℕ → ℕ → ℕ → M) :
+    ∑ p ∈ Finset.range (n + 1), ∑ s ∈ Finset.Icc 1 (n - p), f p s (n - p - s) =
+      ∑ p ∈ Finset.range (n + 1), ∑ s ∈ Finset.Icc 1 (n - p), f (n - p - s) s p := by
+  rw [Finset.sum_sigma', Finset.sum_sigma']
+  refine Finset.sum_nbij' (fun a ↦ ⟨n - a.1 - a.2, a.2⟩) (fun a ↦ ⟨n - a.1 - a.2, a.2⟩)
+    ?_ ?_ ?_ ?_ ?_
+  all_goals
+    simp only [Finset.mem_sigma, Finset.mem_range, Finset.mem_Icc]
+  · intro a ha
+    omega
+  · intro a ha
+    omega
+  · intro a ha
+    exact Sigma.ext (by dsimp only; omega) HEq.rfl
+  · intro a ha
+    exact Sigma.ext (by dsimp only; omega) HEq.rfl
+  · intro a ha
+    congr 1
+    omega
+
+section Stasheff
+
+variable [Ring R] [AddCommMonoid A] [Module R A]
+variable (m : ∀ k : ℕ, MultilinearMap R (fun _ : Fin k ↦ A) A) (d : ℕ → ℤ) (x : ℕ → A)
+
+/-- The `(p, s, t)` term of the unsuspended Stasheff identity in arity `p + s + t`: the arity-`s`
+operation is substituted into the `p`-th slot of the arity-`p + 1 + t` operation.  Its sign is the
+structural Stasheff coefficient `(-1) ^ (p + s * t)` together with the Koszul coefficient
+`(-1) ^ ((2 - s) * (d 0 + ⋯ + d (p - 1)))` of the degree-`2 - s` operation `m_s` crossing the `p`
+prefix inputs. -/
+def stasheffTerm (p s t : ℕ) : A :=
+  negOnePowCast R ((p : ℤ) + s * t + (2 - s) * ∑ i ∈ Finset.range p, d i) •
+    evalNat (m (p + 1 + t)) (replaceBlock x p s (evalNat (m s) fun j ↦ x (p + j)))
+
+/-- The defining expression for an unsuspended Stasheff term. -/
+theorem stasheffTerm_def (p s t : ℕ) : stasheffTerm m d x p s t =
+    negOnePowCast R ((p : ℤ) + s * t + (2 - s) * ∑ i ∈ Finset.range p, d i) •
+      evalNat (m (p + 1 + t))
+        (replaceBlock x p s (evalNat (m s) fun j ↦ x (p + j))) := (rfl)
+
+/-- A Stasheff term only reads the degrees and inputs below its total arity. -/
+theorem stasheffTerm_congr {e : ℕ → ℤ} {y : ℕ → A} (p s t : ℕ)
+    (hd : ∀ i < p + s + t, d i = e i) (hx : ∀ i < p + s + t, x i = y i) :
+    stasheffTerm m d x p s t = stasheffTerm m e y p s t := by
+  have hsum : ∑ i ∈ Finset.range p, d i = ∑ i ∈ Finset.range p, e i :=
+    Finset.sum_congr rfl fun i hi ↦ hd i (by have := Finset.mem_range.1 hi; omega)
+  have hinner : evalNat (m s) (fun j ↦ x (p + j)) =
+      evalNat (m s) (fun j ↦ y (p + j)) := by
+    apply evalNat_congr
+    intro j hj
+    exact hx (p + j) (by omega)
+  rw [stasheffTerm_def, stasheffTerm_def, hsum, hinner]
+  congr 1
+  apply evalNat_congr
+  intro i hi
+  rcases lt_trichotomy i p with hip | rfl | hip
+  · rw [replaceBlock_of_lt _ _ _ _ hip, replaceBlock_of_lt _ _ _ _ hip]
+    exact hx i (by omega)
+  · simp
+  · rw [replaceBlock_of_gt _ _ _ _ hip, replaceBlock_of_gt _ _ _ _ hip]
+    exact hx (i + s - 1) (by omega)
+
+/-- A Stasheff term vanishes when its inner operation, of arity `s`, is zero. -/
+theorem stasheffTerm_eq_zero_of_inner_eq_zero {p s t : ℕ} (h : m s = 0) :
+    stasheffTerm m d x p s t = 0 := by
+  have hinner : evalNat (m s) (fun j ↦ x (p + j)) = 0 := by
+    rw [h, evalNat_def, _root_.zero_apply]
+  rw [stasheffTerm_def, hinner, evalNat_def,
+    (m _).map_coord_zero (⟨p, by omega⟩ : Fin (p + 1 + t)) (by simp), smul_zero]
+
+/-- A Stasheff term vanishes when its outer operation, of arity `p + 1 + t`, is zero. -/
+theorem stasheffTerm_eq_zero_of_outer_eq_zero {p s t : ℕ} (h : m (p + 1 + t) = 0) :
+    stasheffTerm m d x p s t = 0 := by
+  rw [stasheffTerm_def, h, evalNat_def, _root_.zero_apply, smul_zero]
+
+/-- When the inner arity `s` is even, the sign of a Stasheff term is `(-1) ^ p`: both the
+structural exponent `s * t` and the Koszul exponent `(2 - s) * (d 0 + ⋯ + d (p - 1))` are even. -/
+theorem stasheffTerm_of_even {s : ℕ} (hs : Even s) (p t : ℕ) :
+    stasheffTerm m d x p s t =
+      negOnePowCast R (p : ℤ) • evalNat (m (p + 1 + t))
+        (replaceBlock x p s (evalNat (m s) fun j ↦ x (p + j))) := by
+  obtain ⟨r, rfl⟩ := hs
+  rw [stasheffTerm_def]
+  congr 1
+  have hexp : (p : ℤ) + ((r + r : ℕ) : ℤ) * t + (2 - ((r + r : ℕ) : ℤ)) *
+      ∑ i ∈ Finset.range p, d i =
+      p + 2 * (r * t + (1 - r) * ∑ i ∈ Finset.range p, d i) := by
+    push_cast
+    ring
+  rw [hexp, negOnePowCast_add, negOnePowCast_two_mul, mul_one]
+
+/-- The left-hand side `(SI_n)` of the arity-`n` Stasheff identity: the sum of
+`TauCeti.AInfinity.stasheffTerm` over the decompositions `n = p + s + t` with `1 ≤ s`. -/
+def stasheffSum (n : ℕ) : A :=
+  ∑ p ∈ Finset.range (n + 1), ∑ s ∈ Finset.Icc 1 (n - p), stasheffTerm m d x p s (n - p - s)
+
+/-- The defining double sum for the unsuspended Stasheff identity. -/
+theorem stasheffSum_def (n : ℕ) : stasheffSum m d x n =
+    ∑ p ∈ Finset.range (n + 1),
+      ∑ s ∈ Finset.Icc 1 (n - p), stasheffTerm m d x p s (n - p - s) := (rfl)
+
+@[simp]
+theorem stasheffSum_zero : stasheffSum m d x 0 = 0 := by
+  simp [stasheffSum_def]
+
+/-- The arity-`n` Stasheff sum only reads the first `n` supplied degrees and inputs. -/
+theorem stasheffSum_congr {e : ℕ → ℤ} {y : ℕ → A} (n : ℕ)
+    (hd : ∀ i < n, d i = e i) (hx : ∀ i < n, x i = y i) :
+    stasheffSum m d x n = stasheffSum m e y n := by
+  rw [stasheffSum_def, stasheffSum_def]
+  refine Finset.sum_congr rfl fun p hp ↦ ?_
+  refine Finset.sum_congr rfl fun s hs ↦ ?_
+  rw [Finset.mem_range] at hp
+  rw [Finset.mem_Icc] at hs
+  apply stasheffTerm_congr m d x
+  · intro i hi
+    exact hd i (by omega)
+  · intro i hi
+    exact hx i (by omega)
+
+/-- The arity-one identity is `m₁ m₁ = 0`. -/
+theorem stasheffSum_one : stasheffSum m d x 1 = m 1 ![m 1 ![x 0]] := by
+  simp [stasheffSum_def, stasheffTerm_def, Finset.sum_range_succ]
+
+/-- When `m 3` and `m 4` vanish, the arity-four identity is vacuous. -/
+theorem stasheffSum_four_eq_zero_of_m_three_eq_zero_of_m_four_eq_zero
+    (h₃ : m 3 = 0) (h₄ : m 4 = 0) :
+    stasheffSum m d x 4 = 0 := by
+  simp [stasheffSum_def, Finset.sum_range_succ, Finset.sum_Icc_succ_top,
+    stasheffTerm_eq_zero_of_inner_eq_zero, stasheffTerm_eq_zero_of_outer_eq_zero, h₃, h₄]
+
+/-- **Naturality of the Stasheff sums.** A linear map which intertwines two families of
+operations intertwines their Stasheff sums. -/
+theorem map_stasheffSum {B : Type*} [AddCommMonoid B] [Module R B] (f : A →ₗ[R] B)
+    (m' : ∀ k : ℕ, MultilinearMap R (fun _ : Fin k ↦ B) B)
+    (hf : ∀ (k : ℕ) (y : Fin k → A), f (m k y) = m' k fun i ↦ f (y i)) (n : ℕ) :
+    f (stasheffSum m d x n) = stasheffSum m' d (fun i ↦ f (x i)) n := by
+  simp only [stasheffSum_def, stasheffTerm_def, _root_.map_sum, map_smul, evalNat_def, hf,
+    apply_replaceBlock f]
+
+end Stasheff
+
+section SuspendedStasheff
+
+variable [CommRing R] [AddCommMonoid A] [Module R A]
+variable (m : ∀ k : ℕ, MultilinearMap R (fun _ : Fin k ↦ A) A) (d : ℕ → ℤ) (x : ℕ → A)
+
+/-- Up to the structural coefficient `(-1) ^ (p + s * t)`, a Stasheff term is the existing signed
+one-slot substitution evaluated after the canonical reindexing of its three input blocks. -/
+theorem stasheffTerm_eq_smul_signedOneSlot (p s t : ℕ) :
+    stasheffTerm m d x p s t =
+      negOnePowCast R ((p : ℤ) + s * t) •
+        (((m (p + 1 + t)).domDomCongr (Fin.oneSlotEquiv p t).symm).signedOneSlot
+          (2 - (s : ℤ)) (fun i : Fin p ↦ d i) (m s))
+            (fun i ↦ x (Fin.blockEquiv p s t i)) := by
+  rw [stasheffTerm_def, MultilinearMap.signedOneSlot_apply,
+    MultilinearMap.koszulSign_eq_negOnePowCast, Fin.sum_univ_eq_sum_range, smul_smul,
+    ← negOnePowCast_add]
+  congr 1
+  rw [evalNat_def, MultilinearMap.domDomCongr_apply]
+  congr 1
+  funext i
+  obtain ⟨j, rfl⟩ := (Fin.oneSlotEquiv p t).surjective i
+  rcases j with j | (j | j)
+  · rw [Fin.oneSlotEquiv_inl_val, replaceBlock_of_lt _ _ _ _ j.isLt]
+    simp only [Equiv.symm_apply_apply, Sum.elim_inl, Fin.blockEquiv_inl_val]
+  · rcases j with ⟨⟩
+    rw [Fin.oneSlotEquiv_middle_val, replaceBlock_self]
+    simp only [Equiv.symm_apply_apply, Sum.elim_inr, Sum.elim_inl,
+      Fin.blockEquiv_middle_val, evalNat_def]
+  · have hsuffix : p < p + 1 + (j : ℕ) := by omega
+    rw [Fin.oneSlotEquiv_suffix_val, replaceBlock_of_gt _ _ _ _ hsuffix]
+    simp only [Equiv.symm_apply_apply, Sum.elim_inr, Fin.blockEquiv_suffix_val]
+    congr 1
+    omega
+
+/-- The `(p, s, t)` term of the suspended Stasheff identity: the same substitution performed with
+the suspended operations, with no structural coefficient and with the Koszul coefficient of the
+degree-one operation `b_s` crossing the `p` suspended prefix inputs, whose degrees are `d i - 1`.
+-/
+def suspendedStasheffTerm (p s t : ℕ) : A :=
+  negOnePowCast R (∑ i ∈ Finset.range p, (d i - 1)) •
+    evalNat (suspend (replaceDeg d p s) (m (p + 1 + t)))
+      (replaceBlock x p s (evalNat (suspend (fun j ↦ d (p + j)) (m s)) fun j ↦ x (p + j)))
+
+/-- The defining expression for a suspended Stasheff term. -/
+theorem suspendedStasheffTerm_def (p s t : ℕ) : suspendedStasheffTerm m d x p s t =
+    negOnePowCast R (∑ i ∈ Finset.range p, (d i - 1)) •
+      evalNat (suspend (replaceDeg d p s) (m (p + 1 + t)))
+        (replaceBlock x p s
+          (evalNat (suspend (fun j ↦ d (p + j)) (m s)) fun j ↦ x (p + j))) := (rfl)
+
+/-- The left-hand side of the arity-`n` Stasheff identity in the suspended encoding: the sum of
+`TauCeti.AInfinity.suspendedStasheffTerm` over the same decompositions `n = p + s + t`, with no
+structural coefficient. Its identification with the arity-`n` component of `b ∘ b` on the bar
+coalgebra belongs to the tensor-coalgebra layer and is not proved here. -/
+def suspendedStasheffSum (n : ℕ) : A :=
+  ∑ p ∈ Finset.range (n + 1),
+    ∑ s ∈ Finset.Icc 1 (n - p), suspendedStasheffTerm m d x p s (n - p - s)
+
+/-- The defining double sum for the suspended Stasheff identity. -/
+theorem suspendedStasheffSum_def (n : ℕ) : suspendedStasheffSum m d x n =
+    ∑ p ∈ Finset.range (n + 1),
+      ∑ s ∈ Finset.Icc 1 (n - p), suspendedStasheffTerm m d x p s (n - p - s) := (rfl)
+
+theorem suspendedStasheffSum_zero : suspendedStasheffSum m d x 0 = 0 := by
+  simp [suspendedStasheffSum_def]
+
+/-- **The suspended and unsuspended Stasheff terms agree up to the suspension sign of the whole
+arity.**  The sign does not depend on the decomposition, which is why the two identities are
+equivalent. -/
+@[simp]
+theorem suspendedStasheffTerm_eq_smul (p s t : ℕ) :
+    suspendedStasheffTerm m d x p s t =
+      negOnePowCast R (suspExp (p + s + t) d) • stasheffTerm m d x p s t := by
+  have hexp : (∑ i ∈ Finset.range p, (d i - 1)) + suspExp (p + 1 + t) (replaceDeg d p s)
+        + suspExp s (fun j ↦ d (p + j))
+      = suspExp (p + s + t) d +
+          ((p : ℤ) + s * t + (2 - s) * ∑ i ∈ Finset.range p, d i)
+        + 2 * ((t : ℤ) - p - s * t) := by
+    rw [suspExp_replaceDeg]
+    ring
+  rw [suspendedStasheffTerm, stasheffTerm, evalNat_suspend, evalNat_suspend,
+    evalNat_replaceBlock_smul _ _ _ (by omega), smul_smul, smul_smul, smul_smul]
+  congr 1
+  rw [← negOnePowCast_add, ← negOnePowCast_add, hexp, negOnePowCast_add,
+    negOnePowCast_two_mul, mul_one, negOnePowCast_add]
+
+/-- A suspended Stasheff term only reads the degrees and inputs below its total arity. -/
+theorem suspendedStasheffTerm_congr {e : ℕ → ℤ} {y : ℕ → A} (p s t : ℕ)
+    (hd : ∀ i < p + s + t, d i = e i) (hx : ∀ i < p + s + t, x i = y i) :
+    suspendedStasheffTerm m d x p s t = suspendedStasheffTerm m e y p s t := by
+  rw [suspendedStasheffTerm_eq_smul, suspendedStasheffTerm_eq_smul, suspExp_congr hd,
+    stasheffTerm_congr m d x p s t hd hx]
+
+/-- **The suspended and unsuspended Stasheff identities agree up to a global sign.** -/
+@[simp]
+theorem suspendedStasheffSum_eq_smul (n : ℕ) :
+    suspendedStasheffSum m d x n = negOnePowCast R (suspExp n d) • stasheffSum m d x n := by
+  rw [suspendedStasheffSum, stasheffSum, Finset.smul_sum]
+  refine Finset.sum_congr rfl fun p hp ↦ ?_
+  rw [Finset.smul_sum]
+  refine Finset.sum_congr rfl fun s hs ↦ ?_
+  rw [Finset.mem_range] at hp
+  rw [Finset.mem_Icc] at hs
+  have harity : p + s + (n - p - s) = n := by omega
+  rw [suspendedStasheffTerm_eq_smul, harity]
+
+/-- The arity-`n` suspended Stasheff sum only reads the first `n` supplied degrees and inputs. -/
+theorem suspendedStasheffSum_congr {e : ℕ → ℤ} {y : ℕ → A} (n : ℕ)
+    (hd : ∀ i < n, d i = e i) (hx : ∀ i < n, x i = y i) :
+    suspendedStasheffSum m d x n = suspendedStasheffSum m e y n := by
+  rw [suspendedStasheffSum_eq_smul, suspendedStasheffSum_eq_smul, suspExp_congr hd,
+    stasheffSum_congr m d x n hd hx]
+
+/-- **The suspended Stasheff identity free of the structural coefficient holds exactly when the
+unsuspended one does.** -/
+theorem suspendedStasheffSum_eq_zero_iff (n : ℕ) :
+    suspendedStasheffSum m d x n = 0 ↔ stasheffSum m d x n = 0 := by
+  rw [suspendedStasheffSum_eq_smul, negOnePowCast_smul_eq_zero_iff]
+
+end SuspendedStasheff
+
+/-! ### Explicit identities in arities two to four -/
+
+section LowArity
+
+variable [Ring R] [AddCommGroup A] [Module R A]
+variable (m : ∀ k : ℕ, MultilinearMap R (fun _ : Fin k ↦ A) A) (d : ℕ → ℤ) (x : ℕ → A)
+
+/- Expand the finite sums before normalizing their tuples and signs. The insertion API evaluates
+each operation and collapses its block; the integer sign character computes the constant signs. -/
+local macro "normalize_stasheff" : tactic =>
+  `(tactic|
+    simp [stasheffSum_def, Finset.sum_range_succ, Finset.sum_Icc_succ_top] <;>
+    simp [stasheffTerm_def, Finset.sum_range_succ, negOnePowCast_add, mul_smul] <;>
+    norm_num [negOnePowCast_eq_intCast])
+
+/-- The arity-two identity, evaluated: `m₁ m₂ - m₂ (m₁ ⊗ 1) - m₂ (1 ⊗ m₁)`, where the Koszul rule
+turns the last term into `(-1) ^ (d 0)` times `m₂ (a, m₁ b)`. -/
+theorem stasheffSum_two : stasheffSum m d x 2
+    = m 1 ![m 2 ![x 0, x 1]] - m 2 ![m 1 ![x 0], x 1]
+      - negOnePowCast R (d 0) • m 2 ![x 0, m 1 ![x 1]] := by
+  normalize_stasheff
+  abel
+
+/-- The arity-three identity, evaluated using the supplied degrees `d 0, d 1, d 2` (without a
+homogeneity hypothesis):
+`m₁ m₃ + m₂ (m₂ ⊗ 1) - m₂ (1 ⊗ m₂) + m₃ (m₁ ⊗ 1 ⊗ 1 + 1 ⊗ m₁ ⊗ 1 + 1 ⊗ 1 ⊗ m₁)`.
+This display suppresses the degree-dependent Koszul factors, which are explicit in the statement. -/
+theorem stasheffSum_three : stasheffSum m d x 3
+    = m 1 ![m 3 ![x 0, x 1, x 2]]
+      + m 2 ![m 2 ![x 0, x 1], x 2] - m 2 ![x 0, m 2 ![x 1, x 2]]
+      + m 3 ![m 1 ![x 0], x 1, x 2]
+      + negOnePowCast R (d 0) • m 3 ![x 0, m 1 ![x 1], x 2]
+      + negOnePowCast R (d 0 + d 1) • m 3 ![x 0, x 1, m 1 ![x 2]] := by
+  normalize_stasheff
+  abel
+
+/-- The arity-four identity, evaluated using the supplied degrees `d 0, d 1, d 2, d 3` (without a
+homogeneity hypothesis):
+`m₁ m₄ - m₂ (m₃ ⊗ 1) - m₂ (1 ⊗ m₃) + m₃ (m₂ ⊗ 1 ⊗ 1) - m₃ (1 ⊗ m₂ ⊗ 1) + m₃ (1 ⊗ 1 ⊗ m₂)
+- m₄ (m₁ ⊗ 1 ⊗ 1 ⊗ 1 + 1 ⊗ m₁ ⊗ 1 ⊗ 1 + 1 ⊗ 1 ⊗ m₁ ⊗ 1 + 1 ⊗ 1 ⊗ 1 ⊗ m₁)`.
+This display suppresses the degree-dependent Koszul factors, which are explicit in the statement. -/
+theorem stasheffSum_four : stasheffSum m d x 4
+    = m 1 ![m 4 ![x 0, x 1, x 2, x 3]]
+      - m 2 ![m 3 ![x 0, x 1, x 2], x 3]
+      - negOnePowCast R (d 0) • m 2 ![x 0, m 3 ![x 1, x 2, x 3]]
+      + m 3 ![m 2 ![x 0, x 1], x 2, x 3] - m 3 ![x 0, m 2 ![x 1, x 2], x 3]
+        + m 3 ![x 0, x 1, m 2 ![x 2, x 3]]
+      - m 4 ![m 1 ![x 0], x 1, x 2, x 3]
+      - negOnePowCast R (d 0) • m 4 ![x 0, m 1 ![x 1], x 2, x 3]
+      - negOnePowCast R (d 0 + d 1) • m 4 ![x 0, x 1, m 1 ![x 2], x 3]
+      - negOnePowCast R (d 0 + d 1 + d 2) • m 4 ![x 0, x 1, x 2, m 1 ![x 3]] := by
+  normalize_stasheff
+  abel
+
+/-- The arity-two identity is the Leibniz rule for `m₁` and `m₂`, with the Koszul sign
+`(-1) ^ (d 0)` on the second term. -/
+theorem stasheffSum_two_eq_zero_iff : stasheffSum m d x 2 = 0 ↔
+    m 1 ![m 2 ![x 0, x 1]]
+      = m 2 ![m 1 ![x 0], x 1] + negOnePowCast R (d 0) • m 2 ![x 0, m 1 ![x 1]] := by
+  rw [stasheffSum_two, sub_sub, sub_eq_zero]
+
+/-- When `m 3` vanishes, the arity-three identity is associativity of `m₂`. -/
+theorem stasheffSum_three_eq_zero_iff_of_m_three_eq_zero (h₃ : m 3 = 0) :
+    stasheffSum m d x 3 = 0 ↔ m 2 ![m 2 ![x 0, x 1], x 2] = m 2 ![x 0, m 2 ![x 1, x 2]] := by
+  have hz1 : m 1 ![(0 : A)] = 0 := (m 1).map_coord_zero 0 rfl
+  rw [stasheffSum_three, h₃]
+  simp only [_root_.zero_apply, hz1, smul_zero, add_zero, zero_add]
+  rw [sub_eq_zero]
+
+end LowArity
+
+/-! ### Comparison with homogeneous inputs -/
+
+section Comparison
+
+variable [Semiring R] [AddCommMonoid A] [Module R A]
+variable {σ : Type*} [SetLike σ A] (𝒜 : ℤ → σ)
+
+/-- `TauCeti.AInfinity.blockDeg` is the degree of the value of an operation of degree `2 - s` on a
+block of homogeneous inputs. -/
+theorem evalNat_mem_blockDeg {s : ℕ} (f : MultilinearMap R (fun _ : Fin s ↦ A) A)
+    {d : ℕ → ℤ} {x : ℕ → A}
+    (hf : MultilinearMap.IsHomogeneous f (fun _ ↦ 𝒜) 𝒜 (2 - s))
+    (p : ℕ) (hx : ∀ j < s, x (p + j) ∈ 𝒜 (d (p + j))) :
+    evalNat f (fun j ↦ x (p + j)) ∈ 𝒜 (blockDeg d p s) := by
+  rw [blockDeg_def, ← Fin.sum_univ_eq_sum_range (fun j ↦ d (p + j)) s, add_sub_assoc,
+    evalNat_def]
+  exact hf.map_mem _ _ fun j ↦ hx j j.isLt
+
+omit [AddCommMonoid A] in
+/-- **The supplied degrees of a Stasheff term are the actual ones**, for an arbitrary inserted
+element.  If the inputs occurring in an arity-`n` word are homogeneous of degrees `d` and the
+element `e` replacing the block of length `s` at position `p` is homogeneous of degree
+`blockDeg d p s`, then `replaceDeg` records the degrees of the inputs of the outer operation.
+Only the inputs actually read, namely those below `n`, need be homogeneous. -/
+theorem replaceBlock_mem_replaceDeg_of_mem_blockDeg {n p s : ℕ} {d : ℕ → ℤ} {x : ℕ → A} {e : A}
+    (hx : ∀ i < n, x i ∈ 𝒜 (d i)) (he : e ∈ 𝒜 (blockDeg d p s)) (hps : p + s ≤ n)
+    {i : ℕ} (hi : i < p + 1 + (n - p - s)) :
+    replaceBlock x p s e i ∈ 𝒜 (replaceDeg d p s i) := by
+  rcases lt_trichotomy i p with h | rfl | h
+  · rw [replaceBlock_of_lt _ _ _ _ h, replaceDeg_of_lt _ _ _ h]
+    exact hx i (by omega)
+  · rw [replaceBlock_self, replaceDeg_self]
+    exact he
+  · rw [replaceBlock_of_gt _ _ _ _ h, replaceDeg_of_gt _ _ _ h]
+    exact hx _ (by omega)
+
+end Comparison
+
+end AInfinity
+
+end TauCeti

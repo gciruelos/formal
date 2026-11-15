@@ -1,0 +1,405 @@
+import TamaroffPhd.Chapter2Section2DGAlgebras
+
+/-!
+# Chapter 4: Non-commutative calculus
+
+The Tamarkin–Tsygan calculus of an associative algebra `A` computed from a model `B = (T(V), d)`
+through nc polyvector fields `X*(B) = cone(Ad : B → Der(B))` and nc differential forms
+`Θ*(B) = cone(Co : B ⊗ V → B)`.
+
+## Contents
+
+* §4.2.1: Hochschild cochains of `A`, the cup product, Gerstenhaber's pre-Lie product and
+  bracket, the Hochschild differential; Proposition 2.1 (the Gerstenhaber algebra part).
+* §4.2.2: derivations of a quasi-free algebra, the adjoint map `Ad` and the commutator map
+  `Co`, the complexes of nc fields and nc forms; Lemma 2.2 (`Ω¹_B ≅ B ⊗ V ⊗ B`) and the
+  projection of Lemma 2.4.
+
+**Not stated.** The operadic part of the chapter needs colored operads, Koszul duality and
+algebras up to homotopy, which Mathlib does not have: Propositions 1.1–1.2, Theorems 1.3–1.4
+(`PreCalc` is Koszul, `Calc` is inhomogeneous Koszul), Theorem 2.5 (Kontsevich–Soibelman), the
+main Theorems 2.6–2.7 (`(X*(B), Θ*(B))` carries a `Calc∞`-structure ∞-quasi-isomorphic to that of
+Hochschild (co)chains), Theorem 3.1 (dual braces), Theorem 3.2 (duality with `E_A`) and the
+computations of §4.3.3. The module part of Proposition 2.1 (cap product, Lie derivative, Connes'
+operator on Hochschild chains) and Corollary 2.3 are left for a later pass.
+
+-/
+
+noncomputable section
+
+namespace TamaroffPhd
+
+open Classical TensorProduct
+
+/-! ## Hochschild cochains (§4.2.1) -/
+
+section Hochschild
+
+variable (k : Type) [Field k] (A : Type) [Ring A] [Algebra k A]
+
+/-- A Hochschild cochain, read on lists of length its arity.
+
+**Change.** A `p`-cochain is a function on lists of elements of `A`, read on lists of length `p`;
+multilinearity is a separate predicate. This avoids index arithmetic on `Fin (p + q - 1)` in
+the partial compositions. -/
+abbrev Cochain := List A → A
+
+variable {k A}
+
+/-- `f` is a `p`-cochain: on lists of length `p` it is `k`-linear in each argument. -/
+def IsCochain (p : ℕ) (f : Cochain A) : Prop :=
+  ∀ (as : List A) (i : ℕ), as.length = p → i < p → ∀ (x y : A) (c : k),
+    f (as.set i (x + c • y)) = f (as.set i x) + c • f (as.set i y)
+
+/-- **§4.2.1 (Cup product).** `(f ⌣ g)(a₁, …, a_{p+q}) = f(a₁, …, a_p) g(a_{p+1}, …, a_{p+q})`.
+
+Omits the Koszul sign `(-1)^{pq}` coming from `µ (f ⊗ g) ∆` in §4.2.1; without it,
+the Leibniz rule `prop_2_1_leibniz` fails as stated. -/
+def cup (p : ℕ) (f g : Cochain A) : Cochain A := fun as => f (as.take p) * g (as.drop p)
+
+/-- The partial composition `f ∘ᵢ g` for `g` of arity `q`: insert `g` at position `i`. -/
+def circI (q i : ℕ) (f g : Cochain A) : Cochain A :=
+  fun as => f (as.take i ++ [g ((as.drop i).take q)] ++ as.drop (i + q))
+
+/-- **§4.2.1 (Gerstenhaber's pre-Lie product).** `f ∘ g = ∑ᵢ (-1)^{(q-1)i} f ∘ᵢ g` for `f` of
+arity `p` and `g` of arity `q`.
+
+**Gap (error).** In §4.2.1 the thesis erroneously writes the upper limit of the sum as `n`
+(instead of `p`) and omits the signs `(-1)^{(q-1)(i-1)}`.
+
+Lean uses `List.range p` and inserts `(-1)^{(q-1)i}` (`0`-based `i`), but computes
+`q - 1` using `ℕ` subtraction instead of `ℤ` subtraction, which yields `0` instead of `-1` when
+`q = 0`. -/
+def circ (p q : ℕ) (f g : Cochain A) : Cochain A :=
+  fun as => ((List.range p).map fun i => ((-1 : ℤ) ^ ((q - 1) * i)) • circI q i f g as).sum
+
+/-- **§4.2.1 (Gerstenhaber bracket).** `[f, g] = f ∘ g - (-1)^{(p-1)(q-1)} g ∘ f`.
+
+Uses `ℕ` subtraction `(p - 1) * (q - 1)` instead of `ℤ` subtraction
+`((p : ℤ) - 1) * ((q : ℤ) - 1)` (giving `0` instead of `-(q - 1)` when `p = 0` or `-(p - 1)`
+when `q = 0`) and calls `circ`, which also uses `ℕ` subtraction for `q - 1`. -/
+def gbracket (p q : ℕ) (f g : Cochain A) : Cochain A :=
+  fun as => circ p q f g as - ((-1 : ℤ) ^ ((p - 1) * (q - 1))) • circ q p g f as
+
+/-- The Hochschild differential of a `p`-cochain:
+`δf(a₀, …, a_p) = a₀ f(a₁, …, a_p) + ∑ᵢ (-1)^{i+1} f(…, aᵢ a_{i+1}, …) + (-1)^{p+1} f(a₀, …, a_{p-1}) a_p`. -/
+def hochDiff (p : ℕ) (f : Cochain A) : Cochain A := fun as =>
+  as.headD 0 * f (as.drop 1) +
+    ((List.range p).map fun i =>
+      ((-1 : ℤ) ^ (i + 1)) • f (as.take i ++ [as.getD i 0 * as.getD (i + 1) 0] ++ as.drop (i + 2))).sum +
+    ((-1 : ℤ) ^ (p + 1)) • (f (as.take p) * as.getD p 0)
+
+/-- A Hochschild `p`-cocycle. -/
+def IsHochCocycle (p : ℕ) (f : Cochain A) : Prop :=
+  IsCochain (k := k) p f ∧ ∀ as : List A, as.length = p + 1 → hochDiff p f as = 0
+
+/-- A Hochschild `p`-coboundary (as a function on lists of length `p`). -/
+def IsHochCoboundary (p : ℕ) (f : Cochain A) : Prop :=
+  ∃ h, IsCochain (k := k) (p - 1) h ∧ 1 ≤ p ∧ ∀ as : List A, as.length = p → hochDiff (p - 1) h as = f as
+
+/-- **Proposition 2.1 (Gerstenhaber algebra).** On Hochschild cohomology the cup product is
+graded commutative and the Gerstenhaber bracket of cocycles is a cocycle: `HH*(A)` with `⌣` and
+`[-, -]` is a Gerstenhaber algebra.
+
+False as stated because `circ` and `gbracket` use `ℕ` subtraction for
+`p - 1` and `q - 1`: for `p = 2, q = 0` over `A = ℚ[x]`, `f(a, b) = a b` is a `2`-cocycle and
+`g = x` is a `0`-cocycle, yet `gbracket 2 0 f g (a) = 2 x a`, whose Hochschild differential on
+`(a, b)` is `2 x a b ≠ 0` (not a `1`-cocycle). -/
+theorem prop_2_1_gerstenhaber {p q : ℕ} {f g : Cochain A}
+    (hf : IsHochCocycle (k := k) p f) (hg : IsHochCocycle (k := k) q g) :
+    IsHochCocycle (k := k) (p + q) (cup p f g) ∧
+    IsHochCoboundary (k := k) (p + q) (fun as => cup p f g as - ((-1 : ℤ) ^ (p * q)) • cup q g f as) ∧
+    IsHochCocycle (k := k) (p + q - 1) (gbracket p q f g) := by
+  sorry
+
+/-- **Proposition 2.1 (Leibniz rule).** The bracket is a graded derivation of the cup product up
+to coboundaries: `[f ⌣ g, h] - f ⌣ [g, h] - (-1)^{(r-1)q} [f, h] ⌣ g` is a coboundary for
+cocycles `f, g, h` of degrees `p, q, r`.
+
+False as stated in Lean because `cup` uses
+`(f ⌣ g)(a₁, …, a_{p+q}) = f(a₁, …, a_p) g(a_{p+1}, …, a_{p+q})` without the Koszul sign
+`(-1)^{pq}` coming from `µ (f ⊗ g) ∆` in §4.2.1 (under that Koszul sign, `[f ⌣ g, h] =
+f ⌣ [g, h] + (-1)^{(r-1)q} [f, h] ⌣ g` holds). Without `(-1)^{pq}`, over `A = ℚ[x, y, z]`,
+taking `p = 1, q = 1, r = 2` with `f = ∂_z`, `g = x ∂_x`, `h = ∂_x ⌣ ∂_y - ∂_y ⌣ ∂_x`, the
+antisymmetrization of the stated expression on `(x, y, z)` equals `+4 ≠ 0` whereas every
+`2`-coboundary on a commutative algebra has vanishing antisymmetrization. (It also fails for
+`0`-cochains due to `ℕ` subtraction in `circ`/`gbracket`.) -/
+theorem prop_2_1_leibniz {p q r : ℕ} {f g h : Cochain A}
+    (hf : IsHochCocycle (k := k) p f) (hg : IsHochCocycle (k := k) q g)
+    (hh : IsHochCocycle (k := k) r h) :
+    IsHochCoboundary (k := k) (p + q + r - 1) (fun as =>
+      gbracket (p + q) r (cup p f g) h as - cup p f (gbracket q r g h) as -
+        ((-1 : ℤ) ^ ((r - 1) * q)) • cup (p + r - 1) (gbracket p r f h) g as) := by
+  sorry
+
+end Hochschild
+
+/-! ## nc fields and nc forms (§4.2.2) -/
+
+section FieldsForms
+
+variable {k : Type} [Field k]
+
+namespace QuasiFree
+
+variable (B : QuasiFree k)
+
+/-- The graded derivations of `B` of degree `δ` (the space `Der(B)` of §4.2.2, degreewise). -/
+def Der (δ : ℤ) : Set (FreeAlg k B.G →ₗ[k] FreeAlg k B.G) :=
+  {D | B.IsGradedDerivation δ D}
+
+/-- **§4.2.2.** The adjoint map `Ad : B → Der(B)`, `Ad_b = [b, -]` for `b` of degree `n`:
+`Ad_b(x) = b x - (-1)^{n |x|} x b` on monomials `x`. -/
+def ad (n : ℕ) (b : FreeAlg k B.G) : FreeAlg k B.G →ₗ[k] FreeAlg k B.G :=
+  linOnMonomials fun w => b * mono w - ((-1 : k) ^ (n * B.wdeg w)) • (mono w * b)
+
+/-- The adjoint on a monomial, used to check its graded Leibniz rule. -/
+theorem ad_mono (n : ℕ) (b : FreeAlg k B.G) (w : FreeMonoid B.G) :
+    B.ad n b (mono w) = b * mono w - (-1 : k) ^ (n * B.wdeg w) • (mono w * b) := by
+  simp [ad, linOnMonomials, mono]
+
+/-- The adjoint on a homogeneous element, used to check its degree shift. -/
+theorem ad_hom (n m : ℕ) (b x : FreeAlg k B.G) (hx : x ∈ B.hom m) :
+    B.ad n b x = b * x - (-1 : k) ^ (n * m) • (x * b) := by
+  induction hx using Submodule.span_induction with
+  | mem x hx =>
+    obtain ⟨w, hw, rfl⟩ := hx
+    rw [ad_mono, hw]
+  | zero => simp
+  | add x y _ _ hx hy => simp [map_add, hx, hy, mul_add, add_mul, smul_add]; abel
+  | smul c x _ hx => simp [map_smul, hx, smul_sub, smul_smul, mul_comm]
+
+/-- **§4.2.2.** `Ad_b` is a graded derivation of degree `|b|`. -/
+theorem ad_mem_der (n : ℕ) (b : FreeAlg k B.G) (hb : b ∈ B.hom n) :
+    B.ad n b ∈ B.Der n := by
+  constructor
+  · intro m x hx hpos
+    rw [ad_hom B n m b x hx]
+    have hm : ((m : ℤ) + (n : ℤ)).toNat = n + m := by omega
+    rw [hm]
+    apply Submodule.sub_mem
+    · exact GradedGens.hom_mul B.toGradedGens hb hx
+    · apply Submodule.smul_mem
+      simpa only [Nat.add_comm] using GradedGens.hom_mul B.toGradedGens hx hb
+  · intro m x hx hneg
+    omega
+  · intro a c
+    have hm : (mono a * mono c : FreeAlg k B.G) = mono (a * c) := by
+      simp [mono, MonoidAlgebra.single_mul_single]
+    rw [hm, ad_mono, ad_mono, ad_mono]
+    have hd : B.wdeg (a * c) = B.wdeg a + B.wdeg c := by
+      simp [GradedGens.wdeg, FreeMonoid.toList_mul, List.map_append, List.sum_append]
+    simp only [hd, Nat.mul_add, pow_add, Int.natAbs_natCast]
+    rw [← hm]
+    simp only [sub_mul, mul_sub, smul_sub, mul_smul_comm, smul_mul_assoc, mul_assoc,
+      smul_smul]
+    abel
+
+/-- **§4.2.2.** The commutator map `Co : B ⊗ V → B`, `b ⊗ v ↦ [v, b]`, on a monomial `b` and a
+generator `v`. -/
+def co (w : FreeMonoid B.G) (v : B.G) : FreeAlg k B.G :=
+  mono (FreeMonoid.of v) * mono w - ((-1 : k) ^ (B.deg v * B.wdeg w)) • (mono w * mono (FreeMonoid.of v))
+
+/-- **Corollary 2.3.** The complex of nc polyvector fields `X*(B) = cone(Ad : B → Der(B))`, in
+degree `n`: pairs `(λ, f)` with `λ ∈ B` and `f` a derivation, in the shifted degrees of the cone
+(`X = λ + f`).
+
+Since `B.d` has degree `-1` and `Ad : B → Der(B)` has degree `0`,
+`cone(Ad)_n` should have `λ ∈ B_{n-1}` and `f ∈ Der_n(B)` so that `ncFieldsDiff n (λ, f) =
+(dλ, [d, f] ± Ad_λ)` lands in `(B_{n-2}, Der_{n-1}(B)) = ncFields (n - 1)`. Lean places `λ` in
+`B_{n+1}` (`(n + 1).toNat`) instead of `B_{n-1}`, so `[d, f]` has degree `n - 1` while
+`B.ad (n + 1).toNat λ` has degree `n + 1`, and `ncFieldsDiff n` does not land in
+`ncFields (n - 1)`. -/
+def ncFields (n : ℤ) : Set ((FreeAlg k B.G) × (FreeAlg k B.G →ₗ[k] FreeAlg k B.G)) :=
+  {x | (0 ≤ n + 1 → x.1 ∈ B.hom (n + 1).toNat) ∧ (n + 1 < 0 → x.1 = 0) ∧ x.2 ∈ B.Der n}
+
+/-- The differential of `X*(B)`: `(λ, f) ↦ (dλ, [d, f] ± Ad_λ)` for `f` of degree `n`.
+
+Uses `B.ad (n + 1).toNat x.1` matching the `B_{n+1}` degree shift in
+`ncFields`, which differs by `2` from the degree `n - 1` of `B.bracket (-1) n B.d x.2`. -/
+def ncFieldsDiff (n : ℤ) (x : (FreeAlg k B.G) × (FreeAlg k B.G →ₗ[k] FreeAlg k B.G)) :
+    (FreeAlg k B.G) × (FreeAlg k B.G →ₗ[k] FreeAlg k B.G) :=
+  (B.d x.1, B.bracket (-1) n B.d x.2 + ((-1 : k) ^ (n.natAbs + 1)) • B.ad (n + 1).toNat x.1)
+
+/-! ## Kähler differentials and the small resolution -/
+
+/-- The multiplication `B ⊗ B → B`. -/
+def multMap : FreeAlg k B.G ⊗[k] FreeAlg k B.G →ₗ[k] FreeAlg k B.G := LinearMap.mul' k _
+
+/-- **§4.2.2.** The bimodule `Ω¹_B` of non-commutative Kähler differentials, realized as the
+kernel of the multiplication `B ⊗ B → B` (with `b db' b'' = b b' ⊗ b'' - b ⊗ b' b''`). -/
+def kahler : Submodule k (FreeAlg k B.G ⊗[k] FreeAlg k B.G) := LinearMap.ker (multMap B)
+
+/-- The inclusion `V → B` of the generators. -/
+def genIncl : (B.G →₀ k) →ₗ[k] FreeAlg k B.G :=
+  Finsupp.linearCombination k fun g => mono (FreeMonoid.of g)
+
+/-- The map `g : B ⊗ V ⊗ B → Ω¹_B`, `b ⊗ v ⊗ b' ↦ b dv b' = bv ⊗ b' - b ⊗ vb'`. -/
+def kahlerMap : FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G →ₗ[k]
+    FreeAlg k B.G ⊗[k] FreeAlg k B.G :=
+  TensorProduct.map (LinearMap.mul' k _ ∘ₗ TensorProduct.map LinearMap.id (genIncl B))
+      LinearMap.id -
+    TensorProduct.map LinearMap.id (LinearMap.mul' k _ ∘ₗ TensorProduct.map (genIncl B) LinearMap.id) ∘ₗ
+      (TensorProduct.assoc k (FreeAlg k B.G) (B.G →₀ k) (FreeAlg k B.G)).toLinearMap
+
+/-- The map to differentials respects left multiplication, used in Lemma 2.4. -/
+theorem kahlerMap_mulLeft (a : FreeAlg k B.G)
+    (x : (FreeAlg k B.G ⊗[k] (B.G →₀ k)) ⊗[k] FreeAlg k B.G) :
+    kahlerMap B (TensorProduct.map
+      (TensorProduct.map (LinearMap.mulLeft k a) LinearMap.id) LinearMap.id x) =
+    TensorProduct.map (LinearMap.mulLeft k a) LinearMap.id (kahlerMap B x) := by
+  induction x using TensorProduct.inductionOn with
+  | add x y hx hy => simp only [map_add, hx, hy]
+  | tmul av c =>
+    induction av using TensorProduct.inductionOn with
+    | add x y hx hy => simp only [add_tmul, map_add, hx, hy]
+    | tmul b v => simp [kahlerMap, mul_assoc]
+
+private def barProjAux : List B.G → FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G
+  | [] => 0
+  | v :: w => ((1 : FreeAlg k B.G) ⊗ₜ Finsupp.single v (1 : k)) ⊗ₜ mono (FreeMonoid.ofList w) +
+      TensorProduct.map (TensorProduct.map (LinearMap.mulLeft k (mono (FreeMonoid.of v) : FreeAlg k B.G))
+        (LinearMap.id : (B.G →₀ k) →ₗ[k] _)) LinearMap.id (barProjAux w)
+
+private theorem kahlerMap_barProjAux (w : List B.G) :
+    kahlerMap B (barProjAux B w) = mono (FreeMonoid.ofList w) ⊗ₜ 1 - 1 ⊗ₜ mono (FreeMonoid.ofList w) := by
+  induction w with
+  | nil => simp [barProjAux, ← MonoidAlgebra.one_def]
+  | cons v w ih =>
+    rw [barProjAux, map_add, kahlerMap_mulLeft, ih]
+    simp [kahlerMap, genIncl, Finsupp.linearCombination_single]
+
+/-- **Lemma 2.2.** For a quasi-free `B = T(V)`, the map `g : B ⊗ V ⊗ B → Ω¹_B` is an isomorphism
+of `B`-bimodules: it is injective with image `Ω¹_B`. -/
+theorem lemma_2_2 :
+    Function.Injective (kahlerMap B) ∧ LinearMap.range (kahlerMap B) = kahler B := by
+  let barProjLin : FreeAlg k B.G →ₗ[k] FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G :=
+    linOnMonomials fun w => barProjAux B w.toList
+  let mulLeftMap : FreeAlg k B.G →ₗ[k]
+      (FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G →ₗ[k]
+        FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G) :=
+    { toFun := fun a =>
+        TensorProduct.map (TensorProduct.map (LinearMap.mulLeft k a) LinearMap.id) LinearMap.id
+      map_add' := fun a₁ a₂ => by
+        refine LinearMap.ext fun x => ?_
+        induction x using TensorProduct.inductionOn with
+        | add x y hx hy => simp only [LinearMap.add_apply, map_add] at hx hy ⊢; rw [hx, hy]
+        | tmul av c =>
+          induction av using TensorProduct.inductionOn with
+          | add x y hx hy => simp only [LinearMap.add_apply, add_tmul, map_add] at hx hy ⊢; rw [hx, hy]
+          | tmul b v => simp [add_mul, add_tmul]
+      map_smul' := fun r a => by
+        refine LinearMap.ext fun x => ?_
+        induction x using TensorProduct.inductionOn with
+        | add x y hx hy => simp only [LinearMap.smul_apply, map_add, map_smul] at hx hy ⊢; rw [hx, hy]
+        | tmul av c =>
+          induction av using TensorProduct.inductionOn with
+          | add x y hx hy => simp only [LinearMap.smul_apply, add_tmul, map_add, map_smul] at hx hy ⊢; rw [hx, hy]
+          | tmul b v => simp [smul_mul_assoc, smul_tmul'] }
+  let kahlerInv : FreeAlg k B.G ⊗[k] FreeAlg k B.G →ₗ[k]
+      FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G :=
+    TensorProduct.lift
+      { toFun := fun a => -(mulLeftMap a ∘ₗ barProjLin)
+        map_add' := fun a₁ a₂ => by ext b; simp [map_add]; try abel
+        map_smul' := fun r a => by ext b; simp [map_smul] }
+  have hML : ∀ (a : FreeAlg k B.G) (x : FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G),
+      mulLeftMap a x = TensorProduct.map (TensorProduct.map (LinearMap.mulLeft k a) LinearMap.id)
+        LinearMap.id x := fun _ _ => rfl
+  have hbar : ∀ w : FreeMonoid B.G, barProjLin (mono w) = barProjAux B w.toList := by
+    intro w
+    simp [barProjLin, linOnMonomials, mono]
+  have hinv : ∀ (a : FreeAlg k B.G) (w : FreeMonoid B.G),
+      kahlerInv (a ⊗ₜ mono w) = -(mulLeftMap a (barProjAux B w.toList)) := by
+    intro a w
+    simp only [kahlerInv, TensorProduct.lift.tmul, LinearMap.coe_mk, AddHom.coe_mk,
+      LinearMap.neg_apply, LinearMap.comp_apply]
+    rw [hbar]
+  have key : ∀ (a : FreeAlg k B.G) (g : B.G) (w : FreeMonoid B.G),
+      kahlerInv (kahlerMap B ((a ⊗ₜ Finsupp.single g (1 : k)) ⊗ₜ mono w)) =
+        (a ⊗ₜ Finsupp.single g (1 : k)) ⊗ₜ mono w := by
+    intro a g w
+    have h1 : kahlerMap B (((a ⊗ₜ Finsupp.single g (1 : k)) ⊗ₜ mono w)) =
+        (a * mono (FreeMonoid.of g)) ⊗ₜ mono w - a ⊗ₜ mono (FreeMonoid.of g * w) := by
+      simp [kahlerMap, genIncl, Finsupp.linearCombination_single,
+        show (mono (FreeMonoid.of g) * mono w : FreeAlg k B.G) = mono (FreeMonoid.of g * w) by
+          simp [mono, MonoidAlgebra.single_mul_single]]
+    have h2 : (FreeMonoid.of g * w).toList = g :: w.toList := by simp
+    simp only [h1, map_sub]
+    have hmul_comp : ∀ (x : FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G),
+        mulLeftMap a (TensorProduct.map (TensorProduct.map
+          (LinearMap.mulLeft k (mono (FreeMonoid.of g) : FreeAlg k B.G)) LinearMap.id) LinearMap.id x) =
+        mulLeftMap (a * mono (FreeMonoid.of g)) x := by
+      intro x
+      induction x using TensorProduct.inductionOn with
+      | add x y hx hy => simp only [map_add, hx, hy]
+      | tmul av c =>
+        induction av using TensorProduct.inductionOn with
+        | add x y hx hy => simp only [add_tmul, map_add, hx, hy]
+        | tmul b v => simp [mulLeftMap, mul_assoc]
+    rw [hinv, hinv, h2, barProjAux, map_add, hmul_comp]
+    simp only [mulLeftMap, LinearMap.coe_mk, AddHom.coe_mk, TensorProduct.map_tmul,
+      LinearMap.mulLeft_apply, mul_one, LinearMap.id_apply, FreeMonoid.ofList_toList]
+    abel
+  have hleft_inv : kahlerInv ∘ₗ kahlerMap B = LinearMap.id := by
+    ext a g w
+    exact key (mono a) g w
+  have hright_inv : ∀ x, kahlerMap B (kahlerInv x) = x - (multMap B x) ⊗ₜ 1 := by
+    intro x
+    induction x using TensorProduct.inductionOn with
+    | add x y hx hy => simp only [map_add, hx, hy, add_tmul]; abel
+    | tmul a b =>
+      induction b using MonoidAlgebra.induction_linear with
+      | zero => simp
+      | add b₁ b₂ hb₁ hb₂ => simp only [tmul_add, map_add, hb₁, hb₂, mul_add, add_tmul]; abel
+      | single w c =>
+        have hs : (MonoidAlgebra.single w c : FreeAlg k B.G) = c • mono w := by
+          simp [mono, MonoidAlgebra.smul_single]
+        rw [hs]
+        simp only [tmul_smul, map_smul, ← smul_tmul', ← smul_sub]
+        congr 1
+        rw [hinv, map_neg, hML, kahlerMap_mulLeft, kahlerMap_barProjAux]
+        simp [multMap, FreeMonoid.ofList_toList]
+  constructor
+  · intro x y hxy
+    have := congrArg kahlerInv hxy
+    simpa [LinearMap.comp_apply] using
+      (LinearMap.congr_fun hleft_inv x).symm.trans (this.trans (LinearMap.congr_fun hleft_inv y))
+  · apply le_antisymm
+    · rintro y ⟨x, rfl⟩
+      simp only [kahler, LinearMap.mem_ker]
+      induction x using TensorProduct.inductionOn with
+      | add x y hx hy => simp only [map_add, hx, hy, add_zero]
+      | tmul av c =>
+        induction av using TensorProduct.inductionOn with
+        | add x y hx hy => simp only [add_tmul, map_add, hx, hy, add_zero]
+        | tmul a v => simp [kahlerMap, multMap, mul_assoc]
+    · intro x hx
+      refine ⟨kahlerInv x, ?_⟩
+      rw [hright_inv, show multMap B x = 0 from hx, zero_tmul, sub_zero]
+
+/-- The non-trivial component of the projection `π : Bar(B) → S*(B)` of Lemma 2.4:
+`π(1 ⊗ v₁ ⋯ vₙ ⊗ 1) = ∑ᵢ v₁ ⋯ v_{i-1} ⊗ vᵢ ⊗ v_{i+1} ⋯ vₙ`. -/
+def barProj : List B.G → FreeAlg k B.G ⊗[k] (B.G →₀ k) ⊗[k] FreeAlg k B.G
+  | [] => 0
+  | v :: w => ((1 : FreeAlg k B.G) ⊗ₜ Finsupp.single v (1 : k)) ⊗ₜ mono (FreeMonoid.ofList w) +
+      TensorProduct.map (TensorProduct.map (LinearMap.mulLeft k (mono (FreeMonoid.of v) : FreeAlg k B.G))
+        (LinearMap.id : (B.G →₀ k) →ₗ[k] _)) LinearMap.id (barProj w)
+
+/-- **Lemma 2.4.** Under the identification of Lemma 2.2, `π` is the quotient map
+`B ⊗ B ⊗ B → Ω¹_B`: `g(π(1 ⊗ b ⊗ 1)) = b ⊗ 1 - 1 ⊗ b` for every monomial `b`. Hence `π` is a
+map of complexes, and `S*(B)` is a homotopy retract of the bar resolution. -/
+theorem lemma_2_4 (w : List B.G) :
+    kahlerMap B (barProj B w) = mono (FreeMonoid.ofList w) ⊗ₜ 1 - 1 ⊗ₜ mono (FreeMonoid.ofList w) := by
+  induction w with
+  | nil => simp [barProj, ← MonoidAlgebra.one_def]
+  | cons v w ih =>
+    rw [barProj, map_add, kahlerMap_mulLeft, ih]
+    simp [kahlerMap, genIncl, Finsupp.linearCombination_single]
+
+end QuasiFree
+
+end FieldsForms
+
+end TamaroffPhd
+
+end
